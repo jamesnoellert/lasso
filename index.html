@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lasso</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lasso">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{position:fixed;inset:0;width:100%;height:100%;background:#000;overflow:hidden;overscroll-behavior:none}
+body{
+  font:600 16px -apple-system,BlinkMacSystemFont,"Helvetica Neue",system-ui,sans-serif;color:#fff;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;
+  display:flex;align-items:center;justify-content:center;
+}
+button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:block;width:100%;cursor:pointer;touch-action:manipulation}
+
+/* 9:16 container, same proportions as the native app */
+#app{position:relative;width:min(100vw,calc(100vh*9/16));aspect-ratio:9/16;display:flex;flex-direction:column;overflow:hidden;background:#000}
+@supports (height:100dvh){#app{width:min(100vw,calc(100dvh*9/16))}}
+.bar{flex:none;width:100%;aspect-ratio:4/1;display:flex}
+.bar>*{flex:1;height:100%}
+.tool{font-size:22px}
+.tool.on{background:#333}
+#stage{flex:1;min-height:0;position:relative}
+#view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+#loupe{position:absolute;left:0;top:0;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:50%;
+  border:3px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.5);pointer-events:none;display:none;will-change:transform}
+#toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#000;padding:10px 18px;
+  font-size:14px;pointer-events:none;opacity:0;transition:opacity .2s}
+#toast.show{opacity:1}
+
+/* menus */
+.overlay{position:absolute;inset:0;z-index:5}
+.overlay.dim{background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center}
+.menu{position:absolute;right:0;bottom:14.0625%;width:25%;animation:pop .15s ease-out}
+.menu button{height:60px}
+@keyframes pop{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+.picker{width:70%}
+.prow{height:64px;display:flex;align-items:center;background:#000;cursor:pointer}
+.prow.on{background:#333}
+.prow .chips{width:50%;height:100%;display:flex}
+.prow .chips i{flex:1}
+.prow span{flex:1;text-align:center;font-size:14px}
+.picker button{height:52px}
+
+/* full-screen sheets */
+.sheet{position:fixed;inset:0;z-index:10;background:#000;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.sheet header{flex:none;height:56px;display:flex;align-items:center;justify-content:center;position:relative;font-size:18px}
+.sheet header button{position:absolute;right:8px;top:6px;width:44px;height:44px;font-size:20px}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
+.manual{padding:12px 24px 40px;font-weight:400;line-height:1.35;white-space:pre-wrap;max-width:560px;margin:0 auto}
+.grid{display:flex;flex-wrap:wrap;gap:12px;padding:12px 16px}
+.cell{width:80px;height:102px;background:#1a1a1a;cursor:pointer}
+.cell img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;display:block;pointer-events:none}
+.empty{padding:40px 24px;text-align:center;font-weight:400;color:#888;width:100%}
+.itemmenu{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center}
+.itemmenu div{width:160px}
+.itemmenu button{height:52px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar" id="swatches"><div></div><div></div><div></div><div></div></div>
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div id="loupe"></div>
+    <div id="toast"></div>
+  </div>
+  <div class="bar">
+    <div id="active"></div>
+    <button class="tool" id="bP">P</button>
+    <button class="tool" id="bM">M</button>
+    <button class="tool" id="bX">X</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ───────────────────────── Constants ─────────────────────────
+const W = 576, H = 736, N = W * H;
+const EXPORT_SCALE = 4;          // nearest-neighbour upscale on export (2304 x 2944)
+const LONG_PRESS_MS = 600;       // eyedropper hold
+const SWATCH_HOLD_MS = 500;      // palette picker hold
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+// ───────────────────────── Pigments ─────────────────────────
+const PALETTES = [
+  { name: 'Primary',
+    pigments: [[1.0, 0.082, 0.231], [1.0, 0.729, 0.0], [0.0, 0.0, 0.588], [1.0, 1.0, 1.0]],
+    pairs: [[0, 1, 1.0, 0.494, 0.0], [0, 2, 0.231, 0.0, 0.220], [0, 3, 1.0, 0.467, 0.541],
+            [1, 2, 0.373, 0.467, 0.212], [1, 3, 1.0, 0.898, 0.576], [2, 3, 0.498, 0.608, 0.8]] },
+  { name: 'Zorn',
+    pigments: [[0.696, 0.191, 0.158], [0.794, 0.625, 0.188], [0.042, 0.049, 0.148], [1.0, 1.0, 1.0]],
+    pairs: [[0, 1, 0.703, 0.386, 0.112], [0, 2, 0.228, 0.063, 0.087], [0, 3, 0.843, 0.592, 0.566],
+            [1, 2, 0.278, 0.268, 0.100], [1, 3, 0.913, 0.832, 0.604], [2, 3, 0.456, 0.503, 0.594]] },
+];
+// Flatten into typed arrays: P = pure colours, C = [i, j, correction rgb] per pair.
+for (const p of PALETTES) {
+  p.P = new Float64Array(p.pigments.flat());
+  p.C = new Float64Array(p.pairs.flatMap(([i, j, r, g, b]) => {
+    const a = p.pigments[i], c = p.pigments[j];
+    return [i, j, r - (a[0] + c[0]) / 2, g - (a[1] + c[1]) / 2, b - (a[2] + c[2]) / 2];
+  }));
+}
+let palIdx = 0;
+
+// Recipe (4 pigment weights) -> packed 0xAABBGGRR pixel. Same model as PigmentPalette.swift.
+const wv = new Float64Array(4);
+function rgbOf(w0, w1, w2, w3, pal) {
+  const P = pal.P, C = pal.C;
+  wv[0] = w0; wv[1] = w1; wv[2] = w2; wv[3] = w3;
+  let r = w0 * P[0] + w1 * P[3] + w2 * P[6] + w3 * P[9];
+  let g = w0 * P[1] + w1 * P[4] + w2 * P[7] + w3 * P[10];
+  let b = w0 * P[2] + w1 * P[5] + w2 * P[8] + w3 * P[11];
+  const w012 = w0 + w1 + w2;
+  for (let k = 0; k < 30; k += 5) {
+    const i = C[k], j = C[k + 1], wi = wv[i], wj = wv[j];
+    const inter = 2 * Math.sqrt(wi * wj);
+    if (inter > 0.001) {
+      const other = w012 - (i < 3 ? wi : 0) - (j < 3 ? wj : 0);
+      const s = inter * (1 - Math.min(other * 2, 1));
+      r += s * C[k + 2]; g += s * C[k + 3]; b += s * C[k + 4];
+    }
+  }
+  r = r < 0 ? 0 : r > 1 ? 1 : r;
+  g = g < 0 ? 0 : g > 1 ? 1 : g;
+  b = b < 0 ? 0 : b > 1 ? 1 : b;
+  return (0xFF000000 | ((b * 255) | 0) << 16 | ((g * 255) | 0) << 8 | ((r * 255) | 0)) >>> 0;
+}
+const cssOf = (r, pal = PALETTES[palIdx]) => {
+  const c = rgbOf(r[0], r[1], r[2], r[3], pal);
+  return `rgb(${c & 255},${c >> 8 & 255},${c >> 16 & 255})`;
+};
+
+// ───────────────────────── Canvas state ─────────────────────────
+const rec = new Float32Array(N * 4);                 // pigment recipe per pixel
+const art = document.createElement('canvas');        // the 576x736 painting
+art.width = W; art.height = H;
+const actx = art.getContext('2d');
+const img = actx.createImageData(W, H);
+const pix = new Uint32Array(img.data.buffer);        // one 32-bit write per pixel
+
+let tool = 'paint';
+let working = [0, 0, 0, 1];
+let zoom = 1, panX = 0, panY = 0;
+
+// Recompute every display pixel. The painting is made of flat regions, so the
+// colour is only recalculated when the recipe changes from one pixel to the next.
+function paintAll(src, dst, pal) {
+  let a = NaN, b = 0, c = 0, d = 0, col = 0;
+  for (let i = 0, o = 0; i < N; i++, o += 4) {
+    if (src[o] !== a || src[o + 1] !== b || src[o + 2] !== c || src[o + 3] !== d) {
+      a = src[o]; b = src[o + 1]; c = src[o + 2]; d = src[o + 3];
+      col = rgbOf(a, b, c, d, pal);
+    }
+    dst[i] = col;
+  }
+}
+function refreshDisplay() {
+  paintAll(rec, pix, PALETTES[palIdx]);
+  actx.putImageData(img, 0, 0);
+  requestDraw();
+}
+function resetCanvas() {
+  rec.fill(0);
+  for (let o = 3; o < N * 4; o += 4) rec[o] = 1;
+  zoom = 1; panX = 0; panY = 0;
+  refreshDisplay();
+}
+
+// ───────────────────────── View ─────────────────────────
+const view = $('view');
+const vctx = view.getContext('2d', { alpha: false, desynchronized: true });
+let vw = 1, vh = 1, dpr = 1, vLeft = 0, vTop = 0, raf = 0;
+const lasso = [];                                    // flat [x, y, ...] in canvas pixels
+
+function resize() {
+  const r = view.getBoundingClientRect();
+  vw = r.width || 1; vh = r.height || 1; vLeft = r.left; vTop = r.top;
+  dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const w = Math.round(vw * dpr), h = Math.round(vh * dpr);
+  if (view.width !== w || view.height !== h) { view.width = w; view.height = h; }
+  requestDraw();
+}
+new ResizeObserver(resize).observe(view);
+addEventListener('resize', resize);
+addEventListener('scroll', resize, true);
+
+// Draws only when something changed (no idle 60fps loop).
+function requestDraw() { if (!raf) raf = requestAnimationFrame(draw); }
+function draw() {
+  raf = 0;
+  const dw = vw * zoom * dpr, dh = vh * zoom * dpr;
+  const dx = ((panX + 1) / 2 * vw - vw * zoom / 2) * dpr;
+  const dy = ((panY + 1) / 2 * vh - vh * zoom / 2) * dpr;
+  vctx.setTransform(1, 0, 0, 1, 0, 0);
+  vctx.fillStyle = '#000';
+  vctx.fillRect(0, 0, view.width, view.height);
+  vctx.imageSmoothingEnabled = false;                // crisp pixels at any zoom
+  vctx.drawImage(art, dx, dy, dw, dh);
+  if (lasso.length >= 4) {
+    vctx.setTransform(dw / W, 0, 0, dh / H, dx, dy);
+    vctx.beginPath();
+    vctx.moveTo(lasso[0], lasso[1]);
+    for (let i = 2; i < lasso.length; i += 2) vctx.lineTo(lasso[i], lasso[i + 1]);
+    vctx.closePath();
+    vctx.setTransform(1, 0, 0, 1, 0, 0);
+    vctx.lineWidth = dpr;
+    vctx.strokeStyle = 'rgba(51,51,51,.6)';
+    vctx.stroke();
+  }
+}
+const toCanvasX = x => (((x / vw * 2 - 1) - panX) / zoom + 1) / 2 * W;
+const toCanvasY = y => (((y / vh * 2 - 1) - panY) / zoom + 1) / 2 * H;
+function clampPan() {
+  panX = Math.min(Math.max(panX, -zoom), zoom);
+  panY = Math.min(Math.max(panY, -zoom), zoom);
+}
+
+// ───────────────────────── Lasso fill / mix ─────────────────────────
+// Scanline polygon fill (non-zero winding, sampled at pixel centres). It yields
+// horizontal spans directly, so there is no mask image to draw and read back.
+const spans = [];                                    // flat [y, x0, x1, ...]
+let xs = new Float64Array(64), ds = new Int8Array(64);
+function buildSpans() {
+  spans.length = 0;
+  const n = lasso.length;
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 1; i < n; i += 2) { const y = lasso[i]; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  const y0 = Math.max(0, Math.floor(minY)), y1 = Math.min(H - 1, Math.ceil(maxY));
+  if (xs.length < n) { xs = new Float64Array(n); ds = new Int8Array(n); }
+  for (let y = y0; y <= y1; y++) {
+    const sy = y + 0.5;
+    let k = 0;
+    for (let i = 0; i < n; i += 2) {
+      const j = i + 2 === n ? 0 : i + 2;
+      const ya = lasso[i + 1], yb = lasso[j + 1];
+      if ((ya <= sy) === (yb <= sy)) continue;
+      const x = lasso[i] + (sy - ya) * (lasso[j] - lasso[i]) / (yb - ya);
+      const d = yb > ya ? 1 : -1;
+      let m = k++;                                   // insertion sort by x
+      while (m > 0 && xs[m - 1] > x) { xs[m] = xs[m - 1]; ds[m] = ds[m - 1]; m--; }
+      xs[m] = x; ds[m] = d;
+    }
+    let wind = 0, start = 0;
+    for (let c = 0; c < k; c++) {
+      const prev = wind;
+      wind += ds[c];
+      if (prev === 0) start = xs[c];
+      else if (wind === 0) {
+        const a = Math.max(0, Math.ceil(start - 0.5)), b = Math.min(W, Math.ceil(xs[c] - 0.5));
+        if (b > a) spans.push(y, a, b);
+      }
+    }
+  }
+}
+
+function closeLasso() {
+  if (lasso.length >= 6) {
+    buildSpans();
+    if (spans.length) {
+      let r0 = working[0], r1 = working[1], r2 = working[2], r3 = working[3];
+      if (tool === 'mix') {                          // average every recipe inside the shape
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, count = 0;
+        for (let s = 0; s < spans.length; s += 3) {
+          const row = spans[s] * W, end = (row + spans[s + 2]) * 4;
+          for (let o = (row + spans[s + 1]) * 4; o < end; o += 4) {
+            s0 += rec[o]; s1 += rec[o + 1]; s2 += rec[o + 2]; s3 += rec[o + 3];
+          }
+          count += spans[s + 2] - spans[s + 1];
+        }
+        r0 = Math.fround(s0 / count); r1 = Math.fround(s1 / count);
+        r2 = Math.fround(s2 / count); r3 = Math.fround(s3 / count);
+      }
+      // The whole shape ends up one recipe, so its colour is computed exactly once.
+      const col = rgbOf(r0, r1, r2, r3, PALETTES[palIdx]);
+      let minX = W, maxX = 0;
+      for (let s = 0; s < spans.length; s += 3) {
+        const row = spans[s] * W, a = spans[s + 1], b = spans[s + 2];
+        pix.fill(col, row + a, row + b);
+        for (let o = (row + a) * 4, end = (row + b) * 4; o < end; o += 4) {
+          rec[o] = r0; rec[o + 1] = r1; rec[o + 2] = r2; rec[o + 3] = r3;
+        }
+        if (a < minX) minX = a;
+        if (b > maxX) maxX = b;
+      }
+      const minY = spans[0], maxY = spans[spans.length - 3];
+      actx.putImageData(img, 0, 0, minX, minY, maxX - minX, maxY - minY + 1);   // upload only what changed
+      touch();
+    }
+  }
+  lasso.length = 0;
+  requestDraw();
+}
+
+// ───────────────────────── Touch input ─────────────────────────
+const ptrs = new Map();
+let primary = -1, startX = 0, startY = 0, startT = 0;
+let drawing = false, dropping = false, multi = false, lpTimer = 0;
+let pinch = null, lastTap = null, sampled = null;
+const loupe = $('loupe');
+
+const px = e => e.clientX - vLeft, py = e => e.clientY - vTop;
+function addPoint(x, y) {
+  const cx = toCanvasX(x), cy = toCanvasY(y), n = lasso.length;
+  if (n) {                                           // skip points that barely moved
+    const ex = cx - lasso[n - 2], ey = cy - lasso[n - 1];
+    if (ex * ex + ey * ey < 0.25) return;
+  }
+  lasso.push(cx, cy);
+}
+function cancelDrawing() {
+  clearTimeout(lpTimer);
+  if (drawing) { drawing = false; lasso.length = 0; requestDraw(); }
+  if (dropping) { dropping = false; loupe.style.display = 'none'; }
+}
+function startPinch() {
+  const [a, b] = [...ptrs.values()];
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  pinch = {
+    d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: zoom,
+    // the spot of the painting under the fingers, kept under them while zooming
+    cx: ((mx / vw * 2 - 1) - panX) / zoom, cy: ((my / vh * 2 - 1) - panY) / zoom,
+  };
+}
+function updatePinch() {
+  const [a, b] = [...ptrs.values()];
+  if (!pinch) startPinch();
+  zoom = Math.min(Math.max(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, 0.5), 10);
+  panX = ((a.x + b.x) / 2 / vw * 2 - 1) - pinch.cx * zoom;
+  panY = ((a.y + b.y) / 2 / vh * 2 - 1) - pinch.cy * zoom;
+  clampPan();
+  requestDraw();
+}
+
+function beginDrop(x, y) {
+  dropping = true; drawing = false; lasso.length = 0; sampled = null;
+  loupe.style.display = 'block';
+  updateDrop(x, y);
+  requestDraw();
+}
+function updateDrop(x, y) {
+  const cx = Math.floor(toCanvasX(x)), cy = Math.floor(toCanvasY(y));
+  if (cx >= 0 && cx < W && cy >= 0 && cy < H) {
+    const o = (cy * W + cx) * 4;
+    sampled = [rec[o], rec[o + 1], rec[o + 2], rec[o + 3]];
+    loupe.style.background = cssOf(sampled);
+  }
+  loupe.style.transform = `translate(${x}px,${y - 60}px)`;
+}
+function endDrop() {
+  if (!dropping) return;
+  dropping = false;
+  loupe.style.display = 'none';
+  if (sampled) setWorking(sampled);
+  setTool('paint');
+}
+
+view.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  try { view.setPointerCapture(e.pointerId); } catch {}
+  const x = px(e), y = py(e);
+  ptrs.set(e.pointerId, { x, y });
+  if (ptrs.size === 1) {
+    primary = e.pointerId; multi = false; drawing = false; dropping = false;
+    startX = x; startY = y; startT = e.timeStamp; lasso.length = 0;
+    clearTimeout(lpTimer);
+    lpTimer = setTimeout(() => beginDrop(startX, startY), LONG_PRESS_MS);
+  } else {
+    multi = true;                                    // two fingers: navigate, never paint
+    cancelDrawing();
+    startPinch();
+  }
+});
+view.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId);
+  if (!p) return;
+  const x = px(e), y = py(e);
+  p.x = x; p.y = y;
+  if (ptrs.size >= 2) { updatePinch(); return; }
+  if (multi || e.pointerId !== primary) return;
+  if (dropping) { updateDrop(x, y); return; }
+  if (!drawing) {
+    if (Math.hypot(x - startX, y - startY) <= 5) return;
+    clearTimeout(lpTimer);
+    drawing = true;
+    addPoint(startX, startY);
+  }
+  // Use every touch sample the browser collected since the last frame.
+  const batch = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  if (batch.length > 1) for (const c of batch) addPoint(px(c), py(c));
+  else addPoint(x, y);
+  requestDraw();
+});
+function pointerEnd(e) {
+  if (!ptrs.delete(e.pointerId)) return;
+  pinch = null;
+  if (ptrs.size >= 2) startPinch();
+  if (e.type === 'pointercancel') cancelDrawing();
+  else if (e.pointerId === primary && !multi) {
+    clearTimeout(lpTimer);
+    if (dropping) endDrop();
+    else if (drawing) { drawing = false; closeLasso(); }
+    else if (e.timeStamp - startT < 300) {           // a tap: two in a row resets the view
+      const x = px(e), y = py(e);
+      if (lastTap && e.timeStamp - lastTap.t < 350 && Math.hypot(x - lastTap.x, y - lastTap.y) < 40) {
+        zoom = 1; panX = 0; panY = 0; lastTap = null; requestDraw();
+      } else lastTap = { t: e.timeStamp, x, y };
+    }
+  }
+  if (ptrs.size === 0) primary = -1;
+}
+view.addEventListener('pointerup', pointerEnd);
+view.addEventListener('pointercancel', pointerEnd);
+
+// Stop the browser's own gestures from interfering.
+for (const t of ['gesturestart', 'gesturechange', 'contextmenu', 'dblclick'])
+  document.addEventListener(t, e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => {
+  if (!e.target.closest || !e.target.closest('.scroll')) e.preventDefault();
+}, { passive: false });
+
+// ───────────────────────── Tools, swatches, menus ─────────────────────────
+const app = $('app'), swatches = [...$('swatches').children];
+function setWorking(r) {
+  working = [r[0], r[1], r[2], r[3]];
+  $('active').style.background = cssOf(working);
+}
+function setTool(t) {
+  tool = t;
+  $('bP').classList.toggle('on', t === 'paint');
+  $('bM').classList.toggle('on', t === 'mix');
+}
+function refreshSwatches() {
+  const pal = PALETTES[palIdx];
+  swatches.forEach((s, i) => { const p = pal.pigments[i]; s.style.background = `rgb(${p[0] * 255},${p[1] * 255},${p[2] * 255})`; });
+}
+swatches.forEach((s, i) => {
+  let timer = 0;
+  s.addEventListener('pointerdown', () => {
+    timer = setTimeout(() => { timer = 0; showPalettePicker(); }, SWATCH_HOLD_MS);
+  });
+  s.addEventListener('pointerup', () => {
+    if (!timer) return;
+    clearTimeout(timer); timer = 0;
+    const r = [0, 0, 0, 0]; r[i] = 1;
+    setWorking(r); setTool('paint');
+  });
+  for (const t of ['pointerleave', 'pointercancel']) s.addEventListener(t, () => { clearTimeout(timer); timer = 0; });
+});
+$('active').onclick = () => setTool('paint');
+$('bP').onclick = () => setTool('paint');
+$('bM').onclick = () => setTool('mix');
+$('bX').onclick = () => showMenu(['Manual', 'Export', 'Load', 'Save', 'New'],
+  [showManual, () => exportImage(art), showGallery, saveWork, confirmNew]);
+
+let overlay = null;
+function closeMenu() { if (overlay) { overlay.remove(); overlay = null; } }
+function showMenu(items, actions) {
+  closeMenu();
+  overlay = el('div', 'overlay');
+  const stack = el('div', 'menu');
+  items.forEach((t, i) => {
+    const b = el('button', '', t);
+    b.onclick = ev => { ev.stopPropagation(); closeMenu(); actions[i](); };
+    stack.appendChild(b);
+  });
+  overlay.appendChild(stack);
+  overlay.onclick = closeMenu;
+  app.appendChild(overlay);
+}
+function confirmNew() {
+  showMenu(['Cancel', 'New'], [closeMenu, () => { resetCanvas(); touch(); }]);
+}
+function showPalettePicker() {
+  closeMenu();
+  overlay = el('div', 'overlay dim');
+  const stack = el('div', 'picker');
+  PALETTES.forEach((pal, i) => {
+    const row = el('div', 'prow' + (i === palIdx ? ' on' : ''));
+    const chips = el('div', 'chips');
+    for (const p of pal.pigments) {
+      const c = el('i'); c.style.background = `rgb(${p[0] * 255},${p[1] * 255},${p[2] * 255})`;
+      chips.appendChild(c);
+    }
+    row.append(chips, el('span', '', pal.name));
+    row.onclick = () => {
+      palIdx = i;
+      refreshSwatches(); refreshDisplay();
+      setWorking([0, 0, 0, 1]);
+      closeMenu(); touch();
+    };
+    stack.appendChild(row);
+  });
+  const cancel = el('button', '', 'Cancel');
+  cancel.onclick = closeMenu;
+  stack.appendChild(cancel);
+  overlay.appendChild(stack);
+  app.appendChild(overlay);
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1100);
+}
+
+function openSheet(title) {
+  const sheet = el('div', 'sheet'), head = el('header', '', title), x = el('button', '', 'X');
+  const body = el('div', 'scroll');
+  x.onclick = () => sheet.remove();
+  head.appendChild(x);
+  sheet.append(head, body);
+  document.body.appendChild(sheet);
+  return { sheet, body };
+}
+function showManual() {
+  const { body } = openSheet('');
+  body.appendChild(el('div', 'manual',
+`P = Paint
+Draw with your finger to make a lasso, and lift your finger up to fill that shape with the active color.
+
+Pick a color from the palette at the top, or sample any color on the canvas with a long hold. The active color is the bottom left square.
+
+M = Mix
+Same as paint, but your lasso selection creates a mix of all the colors in that shape.
+
+X = Menu
+Make a new file, save your current file to the app, load a saved canvas, or export your current file as an image. Choose "Save Image" in the share sheet to put it in your camera roll.
+
+Palettes
+You can hold down anywhere on the top palette to open the palette options.
+
+Navigation
+Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.
+
+Home Screen
+For the full-screen version, open the share menu in Safari and choose "Add to Home Screen". Paintings saved in the app are kept on this device.`));
+}
+
+// ───────────────────────── Export ─────────────────────────
+function exportImage(source) {
+  const big = document.createElement('canvas');
+  big.width = W * EXPORT_SCALE; big.height = H * EXPORT_SCALE;
+  const g = big.getContext('2d');
+  g.imageSmoothingEnabled = false;                   // nearest-neighbour upscale
+  g.drawImage(source, 0, 0, big.width, big.height);
+  big.toBlob(blob => {
+    if (!blob) { toast('Export failed'); return; }
+    deliver(new File([blob], `lasso-${Date.now()}.png`, { type: 'image/png' }));
+  }, 'image/png');
+}
+async function deliver(file) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; }
+    catch (err) {
+      if (err.name === 'AbortError') return;         // user closed the share sheet
+      if (err.name === 'NotAllowedError') {          // browser wants a fresh tap
+        showMenu(['Cancel', 'Share'], [closeMenu, () => deliver(file)]);
+        return;
+      }
+    }
+  }
+  const a = el('a');
+  a.href = URL.createObjectURL(file); a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// ───────────────────────── Save / load ─────────────────────────
+// Recipes are run-length encoded: flat-colour paintings shrink from 6.8 MB to a few hundred KB.
+function encode() {
+  const runs = [], vals = [];
+  for (let i = 0; i < N;) {
+    const o = i * 4, a = rec[o], b = rec[o + 1], c = rec[o + 2], d = rec[o + 3];
+    let j = i + 1;
+    while (j < N && rec[j * 4] === a && rec[j * 4 + 1] === b && rec[j * 4 + 2] === c && rec[j * 4 + 3] === d) j++;
+    runs.push(j - i); vals.push(a, b, c, d);
+    i = j;
+  }
+  return { runs: new Uint32Array(runs), vals: new Float32Array(vals) };
+}
+function decode(data, out) {
+  if (!data || !data.runs || !data.vals) return false;
+  const { runs, vals } = data;
+  let total = 0;
+  for (let r = 0; r < runs.length; r++) total += runs[r];
+  if (total !== N || vals.length !== runs.length * 4) return false;
+  for (let r = 0, o = 0; r < runs.length; r++) {
+    const a = vals[r * 4], b = vals[r * 4 + 1], c = vals[r * 4 + 2], d = vals[r * 4 + 3];
+    for (let n = runs[r]; n--; o += 4) { out[o] = a; out[o + 1] = b; out[o + 2] = c; out[o + 3] = d; }
+  }
+  return true;
+}
+const validPal = p => Number.isInteger(p) && p >= 0 && p < PALETTES.length;
+
+let dbPromise = null;
+const openDB = () => dbPromise || (dbPromise = new Promise((res, rej) => {
+  const r = indexedDB.open('lasso', 1);
+  r.onupgradeneeded = () => {
+    r.result.createObjectStore('meta', { keyPath: 'id' });   // id, palette, thumbnail
+    r.result.createObjectStore('data');                      // encoded recipes
+  };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+}));
+const idb = (stores, mode, fn) => openDB().then(d => new Promise((res, rej) => {
+  const t = d.transaction(stores, mode);
+  const r = fn(t);
+  t.oncomplete = () => res(r && r.result);
+  t.onerror = t.onabort = () => rej(t.error);
+}));
+
+function saveWork() {
+  const id = 'painting_' + Date.now();
+  const data = encode();
+  const th = document.createElement('canvas');
+  th.width = 72; th.height = Math.round(72 * H / W);
+  const g = th.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(art, 0, 0, th.width, th.height);
+  const thumb = th.toDataURL('image/png');
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  return idb(['meta', 'data'], 'readwrite', t => {
+    t.objectStore('meta').put({ id, palette: palIdx, thumb });
+    t.objectStore('data').put(data, id);
+  }).then(() => toast('Saved'), () => toast("Couldn't save"));
+}
+function deleteWork(id) {
+  return idb(['meta', 'data'], 'readwrite', t => {
+    t.objectStore('meta').delete(id); t.objectStore('data').delete(id);
+  }).catch(() => {});
+}
+const readWork = id => idb('data', 'readonly', t => t.objectStore('data').get(id));
+
+async function showGallery() {
+  let saves = [];
+  try { saves = await idb('meta', 'readonly', t => t.objectStore('meta').getAll()) || []; } catch {}
+  saves.sort((a, b) => a.id < b.id ? 1 : -1);
+  const { sheet, body } = openSheet('Load');
+  const grid = el('div', 'grid');
+  body.appendChild(grid);
+  const showEmpty = () => { if (!grid.children.length) grid.appendChild(el('div', 'empty', 'No saved paintings yet.')); };
+  for (const save of saves) {
+    const cell = el('div', 'cell'), im = el('img');
+    im.src = save.thumb; im.alt = '';
+    cell.appendChild(im);
+    cell.onclick = () => {
+      const menu = el('div', 'itemmenu'), stack = el('div');
+      const actions = {
+        Load: async () => {
+          const data = await readWork(save.id).catch(() => null);
+          if (!decode(data, rec)) { toast("Couldn't load"); return; }
+          if (validPal(save.palette)) palIdx = save.palette;
+          refreshSwatches(); refreshDisplay();
+          setWorking([0, 0, 0, 1]);
+          touch(); sheet.remove();
+        },
+        Export: async () => {                        // rendered separately; the open painting is untouched
+          const data = await readWork(save.id).catch(() => null);
+          const tmp = new Float32Array(N * 4);
+          if (!decode(data, tmp)) { toast("Couldn't export"); return; }
+          const c = document.createElement('canvas');
+          c.width = W; c.height = H;
+          const g = c.getContext('2d'), d = g.createImageData(W, H);
+          paintAll(tmp, new Uint32Array(d.data.buffer), PALETTES[validPal(save.palette) ? save.palette : 0]);
+          g.putImageData(d, 0, 0);
+          exportImage(c);
+        },
+        Delete: () => { deleteWork(save.id); cell.remove(); showEmpty(); },
+        Cancel: () => {},
+      };
+      for (const name of Object.keys(actions)) {
+        const b = el('button', '', name);
+        b.onclick = () => { menu.remove(); actions[name](); };
+        stack.appendChild(b);
+      }
+      menu.appendChild(stack);
+      sheet.appendChild(menu);
+    };
+    grid.appendChild(cell);
+  }
+  showEmpty();
+}
+
+// The painting in progress is kept automatically, because phones often
+// unload web pages in the background.
+let dirty = false, saveTimer = 0;
+function touch() {
+  dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(autosave, 1500);
+}
+function autosave() {
+  clearTimeout(saveTimer);
+  if (!dirty) return;
+  dirty = false;
+  const data = encode();
+  data.palette = palIdx;
+  idb('data', 'readwrite', t => { t.objectStore('data').put(data, '_current'); }).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
+addEventListener('pagehide', autosave);
+
+// ───────────────────────── Start ─────────────────────────
+refreshSwatches();
+setWorking([0, 0, 0, 1]);
+setTool('paint');
+resetCanvas();
+resize();
+readWork('_current').then(data => {
+  if (dirty || !decode(data, rec)) return;
+  if (validPal(data.palette)) palIdx = data.palette;
+  refreshSwatches(); refreshDisplay();
+  setWorking([0, 0, 0, 1]);
+}).catch(() => {});
+
+const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+if ('serviceWorker' in navigator && !local) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// Small hook for automated checks.
+window.__lasso = { W, H, rec, pix, encode, decode, state: () => ({ tool, working, zoom, panX, panY, palIdx }) };
+})();
+</script>
+</body>
+</html>
