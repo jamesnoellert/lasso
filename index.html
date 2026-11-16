@@ -133,9 +133,12 @@ const el = (tag, cls, text) => {
 // Mixing uses the Kubelka-Munk paint equations, so colours darken the way real
 // paint does: red + blue goes nearly black, and a touch of yellow neutralises it.
 const PALETTES = [
-  { name: 'Primary',     // cadmium red, cadmium yellow, ultramarine blue, titanium white
-    mass: [[245, 22, 36], [255, 186, 0], [8, 10, 44]],
-    S: [[0.01752, 0.03218, 0.05895], [0.08626, 0.19695, 0.038], [0.01091, 0.00495, 0.00501]] },
+  { name: 'Primary',     // cadmium red, cadmium yellow, phthalo blue, titanium white
+    // The red is opaque in its own channel, so it survives in a mix with blue and
+    // turns it into a warm near-black. The blue is transparent, most of all in the
+    // blue channel, so white opens it into clean, saturated sky tints.
+    mass: [[244, 14, 30], [255, 186, 0], [4, 36, 82]],
+    S: [[0.4, 0.1, 0.05895], [0.08626, 0.6, 0.038], [0.04, 0.01, 0.004]] },
   { name: 'Zorn',        // venetian red, yellow ochre, ivory black, titanium white
     mass: [[177, 49, 40], [202, 159, 48], [11, 12, 38]],
     S: [[0.21887, 0.05039, 0.04375], [0.25096, 0.21714, 0.0429], [0.01356, 0.01224, 0.03307]] },
@@ -436,6 +439,7 @@ function closeLasso() {
         }
         r0 = Math.fround(s0 / count); r1 = Math.fround(s1 / count);
         r2 = Math.fround(s2 / count); r3 = Math.fround(s3 / count);
+        setWorking([r0, r1, r2, r3]);                // the mix is loaded, ready to paint with
       }
       // The whole shape ends up one recipe, so its colour is computed exactly once.
       const col = rgbOf(r0, r1, r2, r3, PALETTES[palIdx]);
