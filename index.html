@@ -28,16 +28,19 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 @supports (height:100dvh){#app{width:min(100vw,calc(100dvh*4/7))}}
 .bar{flex:none;width:100%;aspect-ratio:4/1;display:flex}
 .bar>*{flex:1;height:100%}
-.tool{font-size:22px}
+/* The bottom bar floats over the foot of the stage: nothing on the left (the view
+   shows through), then the menu button, then the colour well. */
+#tools{position:absolute;left:0;bottom:0;z-index:2;justify-content:flex-end;pointer-events:none}
+#tools>*{flex:none;width:25%;pointer-events:auto;cursor:pointer}
+#bX{background:#000;display:flex;align-items:center;justify-content:center}
+#bX svg{width:28px;height:28px;display:block}
 .g{display:inline-block;transition:transform .2s}
-#gap{display:none}
-.tool.on{background:#34333e}
 #stage{flex:1;min-height:0;position:relative}
 #view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
 
 #loupe{position:absolute;left:0;top:0;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:50%;
   border:3px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.5);pointer-events:none;display:none;will-change:transform}
-#toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#000;padding:10px 18px;
+#toast{position:absolute;left:50%;bottom:calc(var(--bar,0px) + 16px);transform:translateX(-50%);background:#000;padding:10px 18px;
   font-size:14px;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.show{opacity:1}
 
@@ -49,7 +52,6 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 @keyframes pop{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
 .picker{width:70%}
 .prow{height:64px;display:flex;align-items:center;background:#000;cursor:pointer}
-.prow.on{background:#34333e}
 .prow .chips{width:50%;height:100%;display:flex}
 .prow .chips i{flex:1}
 .prow span{flex:1;text-align:center;font-size:14px}
@@ -71,14 +73,14 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .itemmenu button{height:52px}
 
 /* Wide screens (tablet, desktop): the canvas takes the whole window and the
-   controls become one centred dock: palette, a black divider, then the tools. */
-html.wide #app{--sq:min(88px,calc(100vw/8.5));width:100vw;height:100%;aspect-ratio:auto;display:block}
+   controls become one centred dock: palette, the black menu button, the well. */
+html.wide #app{--sq:min(88px,calc(100vw/8));width:100vw;height:100%;aspect-ratio:auto;display:block}
 html.wide #stage{position:absolute;inset:0}
-html.wide .bar,html.wide #gap{position:absolute;bottom:env(safe-area-inset-bottom);height:var(--sq);aspect-ratio:auto;z-index:2}
-html.wide .bar{width:calc(var(--sq)*4)}
-html.wide #swatches{left:calc(50% - var(--sq)*4.25)}
-html.wide #gap{display:block;left:calc(50% - var(--sq)*.25 - 1px);width:calc(var(--sq)*.5 + 2px);background:#000}
-html.wide #tools{left:calc(50% + var(--sq)*.25)}
+html.wide .bar{position:absolute;bottom:env(safe-area-inset-bottom);height:var(--sq);aspect-ratio:auto;z-index:2;width:calc(var(--sq)*4)}
+html.wide #swatches{left:calc(50% - var(--sq)*3)}
+html.wide #tools{left:calc(50% + var(--sq) - 1px);bottom:env(safe-area-inset-bottom);width:calc(var(--sq)*2 + 1px)}
+html.wide #tools>*{flex:1;width:auto}
+html.wide #tools>#well{flex:none;width:var(--sq)}
 html.wide .menu button{font-size:14px;height:52px}
 html.wide .picker{width:280px}
 html.wide #toast{bottom:calc(var(--sq) + 16px)}
@@ -87,8 +89,8 @@ html.wide #toast{bottom:calc(var(--sq) + 16px)}
    app is counter-rotated) and only the lettering turns to face the viewer. */
 html.ccw .g,html.ccw .picker{transform:rotate(90deg)}
 html.cw .g,html.cw .picker{transform:rotate(-90deg)}
-html.ccw #toast{bottom:40px;transform:translateX(-50%) rotate(90deg)}
-html.cw #toast{bottom:40px;transform:translateX(-50%) rotate(-90deg)}
+html.ccw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(90deg)}
+html.cw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(-90deg)}
 html.ccw .menu button,html.cw .menu button{font-size:14px}
 </style>
 </head>
@@ -100,12 +102,9 @@ html.ccw .menu button,html.cw .menu button{font-size:14px}
     <div id="loupe"></div>
     <div id="toast"></div>
   </div>
-  <div id="gap"></div>
   <div class="bar" id="tools">
-    <div id="active"></div>
-    <button class="tool" id="bP"><span class="g">P</span></button>
-    <button class="tool" id="bM"><span class="g">M</span></button>
-    <button class="tool" id="bX"><span class="g">X</span></button>
+    <div id="bX"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 7.5 21 16.5H17.9L12 10.6 6.1 16.5H3z"/></svg></div>
+    <div id="well"></div>
   </div>
 </div>
 
@@ -179,6 +178,7 @@ const PURE = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
 // A new canvas is a warm grey ground, stored as the pigment recipe that comes
 // closest to it, so it mixes with paint like a toned canvas would.
 const GROUND_RGB = [126, 110, 119];
+const BLEND_RGB = [106, 92, 100];                    // foot of the mix bands: a shade darker, so it shows against the canvas
 function groundOf(pal) {
   if (pal.ground) return pal.ground;
   const err = w => {
@@ -215,7 +215,7 @@ const img = actx.createImageData(W, H);
 const pix = new Uint32Array(img.data.buffer);        // one 32-bit write per pixel
 
 let tool = 'paint';
-let working = [0, 0, 0, 1];
+let working = [1, 0, 0, 0];                          // starts loaded with the first tube
 let zoom = 1, panX = 0, panY = 0;
 
 // Recompute every display pixel. The painting is made of flat regions, so the
@@ -238,7 +238,7 @@ function refreshDisplay() {
 function resetCanvas() {
   const g = groundOf(PALETTES[palIdx]);
   for (let o = 0; o < N * 4; o += 4) { rec[o] = g[0]; rec[o + 1] = g[1]; rec[o + 2] = g[2]; rec[o + 3] = g[3]; }
-  zoom = 1; panX = 0; panY = 0;
+  goHome();
   refreshDisplay();
 }
 
@@ -248,14 +248,21 @@ const vctx = view.getContext('2d', { alpha: false, desynchronized: true });
 let vw = 1, vh = 1, dpr = 1, vcx = 0, vcy = 0, raf = 0;
 let turn = 0;                                      // phone on its side: -1 or 1, otherwise 0
 let bw = 1, bh = 1;                                // canvas size on screen at zoom 1 (fills the width)
+let homeY = 0;                                     // resting pan: canvas centred, or on a phone flush under the palette
 const lasso = [];                                    // flat [x, y, ...] in canvas pixels
+const root = document.documentElement;
 
+function goHome() { zoom = 1; panX = 0; panY = homeY; requestDraw(); }
 function resize() {
   const r = view.getBoundingClientRect();
   vw = view.clientWidth || 1; vh = view.clientHeight || 1;
   vcx = r.left + r.width / 2; vcy = r.top + r.height / 2;
-  bw = vw; bh = vw * H / W;
-  if (Math.abs(bh - vh) < 1.5) bh = vh;              // phone: the view is the canvas shape, give or take rounding
+  // On a phone the view runs on under the bottom bar; the canvas sits at its top, in whole pixels.
+  const phone = !root.classList.contains('wide');
+  bw = vw; bh = phone ? Math.round(vw * H / W) : vw * H / W;
+  const home = phone ? bh / vh - 1 : 0;
+  if (zoom === 1 && panX === 0 && panY === homeY) panY = home;
+  homeY = home;
   dpr = Math.min(window.devicePixelRatio || 1, 3);
   const w = Math.round(vw * dpr), h = Math.round(vh * dpr);
   if (view.width !== w || view.height !== h) { view.width = w; view.height = h; }
@@ -349,10 +356,74 @@ function buildSpans() {
   }
 }
 
+// ───────────────────────── Undo ─────────────────────────
+// A step remembers only the recipes under the shape that was changed, run-length
+// encoded, so three steps of history cost very little memory.
+const UNDO_STEPS = 3;
+const undoStack = [], redoStack = [];
+function capture(sp) {
+  const runs = [], vals = [];
+  let a = NaN, b = 0, c = 0, d = 0, n = 0;
+  for (let s = 0; s < sp.length; s += 3) {
+    const row = sp[s] * W;
+    for (let o = (row + sp[s + 1]) * 4, end = (row + sp[s + 2]) * 4; o < end; o += 4) {
+      if (rec[o] !== a || rec[o + 1] !== b || rec[o + 2] !== c || rec[o + 3] !== d) {
+        if (n) runs.push(n);
+        a = rec[o]; b = rec[o + 1]; c = rec[o + 2]; d = rec[o + 3]; n = 0;
+        vals.push(a, b, c, d);
+      }
+      n++;
+    }
+  }
+  if (n) runs.push(n);
+  return { spans: sp, runs, vals };
+}
+function restore(h) {
+  const pal = PALETTES[palIdx], sp = h.spans, runs = h.runs, vals = h.vals;
+  let r = -1, left = 0, a = 0, b = 0, c = 0, d = 0, col = 0;
+  for (let s = 0; s < sp.length; s += 3) {
+    const row = sp[s] * W;
+    for (let i = row + sp[s + 1], end = row + sp[s + 2]; i < end; i++) {
+      if (!left) {
+        r++; left = runs[r];
+        a = vals[r * 4]; b = vals[r * 4 + 1]; c = vals[r * 4 + 2]; d = vals[r * 4 + 3];
+        col = rgbOf(a, b, c, d, pal);
+      }
+      left--;
+      const o = i * 4;
+      rec[o] = a; rec[o + 1] = b; rec[o + 2] = c; rec[o + 3] = d;
+      pix[i] = col;
+    }
+  }
+  actx.putImageData(img, 0, 0);
+  requestDraw();
+  touch();
+}
+function remember(sp) {                              // call just before changing the pixels under sp
+  undoStack.push(capture(sp));
+  if (undoStack.length > UNDO_STEPS) undoStack.shift();
+  redoStack.length = 0;
+}
+function stepHistory(from, to) {
+  const h = from.pop();
+  if (!h) return;
+  to.push(capture(h.spans));
+  restore(h);
+}
+const undo = () => stepHistory(undoStack, redoStack);
+const redo = () => stepHistory(redoStack, undoStack);
+function clearHistory() { undoStack.length = 0; redoStack.length = 0; }
+function wholeCanvas() {
+  const sp = [];
+  for (let y = 0; y < H; y++) sp.push(y, 0, W);
+  return sp;
+}
+
 function closeLasso() {
   if (lasso.length >= 6) {
     buildSpans();
     if (spans.length) {
+      remember(spans.slice());
       let r0 = working[0], r1 = working[1], r2 = working[2], r3 = working[3];
       if (tool === 'mix') {                          // average every recipe inside the shape
         let s0 = 0, s1 = 0, s2 = 0, s3 = 0, count = 0;
@@ -392,6 +463,9 @@ const ptrs = new Map();
 let primary = -1, startX = 0, startY = 0, startT = 0;
 let drawing = false, dropping = false, multi = false, lpTimer = 0;
 let pinch = null, lastTap = null, sampled = null;
+let panning = null;                                  // one-pointer pan: space or middle mouse, or a finger once a pencil is in use
+let penSeen = false, penId = -1, spaceDown = false;
+let gMax = 0, gMoved = false, gView = null;          // for spotting two- and three-finger taps
 const loupe = $('loupe');
 
 // Screen position -> position inside the view, allowing for the sideways-phone rotation.
@@ -452,18 +526,28 @@ function endDrop() {
 
 view.addEventListener('pointerdown', e => {
   e.preventDefault();
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const mouse = e.pointerType === 'mouse', pen = e.pointerType === 'pen';
+  if (mouse && e.button !== 0 && e.button !== 1) return;
+  if (pen) {                                         // the pencil always wins: drop a palm that landed first
+    penSeen = true; penId = e.pointerId;
+    if (ptrs.size) { cancelDrawing(); ptrs.clear(); pinch = null; }
+  } else if (penId !== -1) return;                   // ignore touches while the pencil is down
   try { view.setPointerCapture(e.pointerId); } catch {}
   const x = px(e), y = py(e);
-  ptrs.set(e.pointerId, { x, y });
+  ptrs.set(e.pointerId, { x, y, sx: x, sy: y });
   if (ptrs.size === 1) {
-    primary = e.pointerId; multi = false; drawing = false; dropping = false;
+    primary = e.pointerId; multi = false; drawing = false; dropping = false; panning = null;
     startX = x; startY = y; startT = e.timeStamp; lasso.length = 0;
+    gMax = 1; gMoved = false; gView = { zoom, panX, panY };
     clearTimeout(lpTimer);
-    lpTimer = setTimeout(() => beginDrop(startX, startY), LONG_PRESS_MS);
+    if (mouse && (e.button === 1 || spaceDown)) panning = { x, y, panX, panY };
+    else if (e.altKey) beginDrop(x, y);              // Alt/Option: eyedropper straight away
+    else lpTimer = setTimeout(() => beginDrop(startX, startY), LONG_PRESS_MS);
   } else {
     multi = true;                                    // two fingers: navigate, never paint
     cancelDrawing();
+    panning = null;
+    if (ptrs.size > gMax) gMax = ptrs.size;
     startPinch();
   }
 });
@@ -472,12 +556,23 @@ view.addEventListener('pointermove', e => {
   if (!p) return;
   const x = px(e), y = py(e);
   p.x = x; p.y = y;
+  if (!gMoved && Math.hypot(x - p.sx, y - p.sy) > 10) gMoved = true;
   if (ptrs.size >= 2) { updatePinch(); return; }
   if (multi || e.pointerId !== primary) return;
+  if (panning) {
+    panX = panning.panX + (x - panning.x) / vw * 2;
+    panY = panning.panY + (y - panning.y) / vh * 2;
+    clampPan(); requestDraw();
+    return;
+  }
   if (dropping) { updateDrop(x, y); return; }
   if (!drawing) {
-    if (Math.hypot(x - startX, y - startY) <= 5) return;
+    if (Math.hypot(x - startX, y - startY) <= (e.pointerType === 'pen' ? 2 : 5)) return;
     clearTimeout(lpTimer);
+    if (penSeen && e.pointerType === 'touch') {      // with a pencil in use, a finger moves the canvas
+      panning = { x, y, panX, panY };
+      return;
+    }
     drawing = true;
     addPoint(startX, startY);
   }
@@ -488,22 +583,31 @@ view.addEventListener('pointermove', e => {
   requestDraw();
 });
 function pointerEnd(e) {
+  if (e.pointerId === penId) penId = -1;
   if (!ptrs.delete(e.pointerId)) return;
   pinch = null;
   if (ptrs.size >= 2) startPinch();
-  if (e.type === 'pointercancel') cancelDrawing();
+  if (e.type === 'pointercancel') { cancelDrawing(); panning = null; gMoved = true; }
   else if (e.pointerId === primary && !multi) {
     clearTimeout(lpTimer);
-    if (dropping) endDrop();
+    if (panning) panning = null;
+    else if (dropping) endDrop();
     else if (drawing) { drawing = false; closeLasso(); }
     else if (e.timeStamp - startT < 300) {           // a tap: two in a row resets the view
       const x = px(e), y = py(e);
       if (lastTap && e.timeStamp - lastTap.t < 350 && Math.hypot(x - lastTap.x, y - lastTap.y) < 40) {
-        zoom = 1; panX = 0; panY = 0; lastTap = null; requestDraw();
+        lastTap = null; goHome();
       } else lastTap = { t: e.timeStamp, x, y };
     }
   }
-  if (ptrs.size === 0) primary = -1;
+  if (ptrs.size === 0) {
+    // A quick tap with two fingers undoes, with three redoes (as in most painting apps).
+    if (multi && !gMoved && (gMax === 2 || gMax === 3) && e.timeStamp - startT < 350) {
+      zoom = gView.zoom; panX = gView.panX; panY = gView.panY; requestDraw();
+      if (gMax === 2) undo(); else redo();
+    }
+    primary = -1;
+  }
 }
 view.addEventListener('pointerup', pointerEnd);
 view.addEventListener('pointercancel', pointerEnd);
@@ -537,14 +641,32 @@ document.addEventListener('touchmove', e => {
 
 // ───────────────────────── Tools, swatches, menus ─────────────────────────
 const app = $('app'), swatches = [...$('swatches').children];
+// The well is the only tool control. Flat colour: the lasso paints with it.
+// Eight bands fading from that colour to a grey just darker than the canvas: the lasso mixes.
+const well = $('well');
+function refreshWell() {
+  const c = rgbOf(working[0], working[1], working[2], working[3], PALETTES[palIdx]);
+  const from = [c & 255, c >> 8 & 255, c >> 16 & 255];
+  if (tool === 'paint') { well.style.background = `rgb(${from})`; return; }
+  const bands = [];
+  for (let i = 0; i < 8; i++) {
+    const rgb = from.map((v, k) => Math.round(v + (BLEND_RGB[k] - v) * i / 7));
+    bands.push(`rgb(${rgb}) ${i * 12.5}% ${(i + 1) * 12.5}%`);
+  }
+  // "top" is the viewer's top, also when the phone is on its side
+  well.style.background = `linear-gradient(${turn === 0 ? 'to bottom' : turn < 0 ? 'to left' : 'to right'},${bands})`;
+}
 function setWorking(r) {
   working = [r[0], r[1], r[2], r[3]];
-  $('active').style.background = cssOf(working);
+  refreshWell();
 }
 function setTool(t) {
   tool = t;
-  $('bP').classList.toggle('on', t === 'paint');
-  $('bM').classList.toggle('on', t === 'mix');
+  refreshWell();
+}
+function pickTube(i) {
+  const r = [0, 0, 0, 0]; r[i] = 1;
+  setWorking(r); setTool('paint');
 }
 function refreshSwatches() {
   const pal = PALETTES[palIdx];
@@ -558,16 +680,45 @@ swatches.forEach((s, i) => {
   s.addEventListener('pointerup', () => {
     if (!timer) return;
     clearTimeout(timer); timer = 0;
-    const r = [0, 0, 0, 0]; r[i] = 1;
-    setWorking(r); setTool('paint');
+    pickTube(i);
   });
   for (const t of ['pointerleave', 'pointercancel']) s.addEventListener(t, () => { clearTimeout(timer); timer = 0; });
 });
-$('active').onclick = () => setTool('paint');
-$('bP').onclick = () => setTool('paint');
-$('bM').onclick = () => setTool('mix');
-$('bX').onclick = () => showMenu(['Manual', 'Export', 'Load', 'Save', 'New'],
-  [showManual, () => exportImage(art), showGallery, saveWork, confirmNew]);
+const toggleTool = () => setTool(tool === 'paint' ? 'mix' : 'paint');
+well.onclick = toggleTool;
+$('bX').onclick = () => showMenu(['Manual', 'Export', 'Load', 'Save', 'New', 'Undo'],
+  [showManual, () => exportImage(art), showGallery, saveWork, confirmNew, undo]);
+
+// ───────────────────────── Keyboard ─────────────────────────
+function zoomBy(f) { zoomAbout(vw / 2, vh / 2, fracX(vw / 2), fracY(vh / 2), zoom * f); }
+addEventListener('keydown', e => {
+  const sheet = document.querySelector('.sheet');
+  if (e.key === 'Escape') {
+    if (sheet) sheet.remove(); else { closeMenu(); cancelDrawing(); }
+    return;
+  }
+  if (sheet) return;
+  const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey) {
+    if (k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+    else if (k === 'y') { e.preventDefault(); redo(); }
+    else if (k === 's') { e.preventDefault(); if (!e.repeat) saveWork(); }
+    return;
+  }
+  if (e.altKey) return;
+  if (k === ' ') { e.preventDefault(); spaceDown = true; view.style.cursor = 'grab'; return; }
+  if (k === '=' || k === '+') zoomBy(1.25);
+  else if (k === '-' || k === '_') zoomBy(0.8);
+  else if (e.repeat) return;
+  else if (k === 'b') setTool('paint');
+  else if (k === 'm') setTool('mix');
+  else if (k === 'x') toggleTool();
+  else if (k >= '1' && k <= '4') pickTube(+k - 1);
+  else if (k === '0') goHome();
+});
+const spaceUp = () => { spaceDown = false; view.style.cursor = ''; };
+addEventListener('keyup', e => { if (e.key === ' ') spaceUp(); });
+addEventListener('blur', spaceUp);
 
 let overlay = null;
 function closeMenu() { if (overlay) { overlay.remove(); overlay = null; } }
@@ -584,7 +735,7 @@ function showMenu(items, actions) {
   overlay.appendChild(stack);
   overlay.onclick = closeMenu;
   app.appendChild(overlay);
-  // Sit directly above the X button, whichever layout is active.
+  // Sit directly above the menu button, whichever layout is active.
   const btn = $('bX');
   let x = 0, y = 0;
   for (let n = btn; n && n !== app; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
@@ -594,7 +745,6 @@ function showMenu(items, actions) {
 }
 
 // Picks the layout: phone column, wide-screen dock, or phone on its side.
-const root = document.documentElement;
 function layout() {
   const w = innerWidth, h = innerHeight;
   const sideways = matchMedia('(pointer:coarse)').matches && w > h && h <= 500;
@@ -616,24 +766,25 @@ function layout() {
     let cw = Math.floor(Math.min(aw, ah * 4 / 7)) + 1, bar, ch;
     do { cw--; bar = Math.round(cw / 4); ch = bar * 2 + Math.round(cw * 5 / 4); } while (ch > ah && cw > 8);
     const L = Math.floor((w - (turn ? ch : cw)) / 2), T = Math.floor((h - (turn ? cw : ch)) / 2);
-    st.cssText = `position:fixed;left:0;top:0;width:${cw}px;height:${ch}px;aspect-ratio:auto;transform-origin:0 0;transform:` +
+    st.cssText = `--bar:${bar}px;position:fixed;left:0;top:0;width:${cw}px;height:${ch}px;aspect-ratio:auto;transform-origin:0 0;transform:` +
       (turn === 0 ? `translate(${L}px,${T}px)`
        : turn < 0 ? `translate(${L}px,${T + cw}px) rotate(-90deg)`
                   : `translate(${L + ch}px,${T}px) rotate(90deg)`);
     bars.forEach(b => b.style.height = bar + 'px');
   }
   closeMenu();
+  refreshWell();
   resize();
 }
 function confirmNew() {
-  showMenu(['Cancel', 'New'], [closeMenu, () => { resetCanvas(); touch(); }]);
+  showMenu(['Cancel', 'New'], [closeMenu, () => { remember(wholeCanvas()); resetCanvas(); touch(); }]);
 }
 function showPalettePicker() {
   closeMenu();
   overlay = el('div', 'overlay dim');
   const stack = el('div', 'picker');
   PALETTES.forEach((pal, i) => {
-    const row = el('div', 'prow' + (i === palIdx ? ' on' : ''));
+    const row = el('div', 'prow');
     const chips = el('div', 'chips');
     for (const r of PURE) {
       const c = el('i'); c.style.background = cssOf(r, pal);
@@ -643,7 +794,7 @@ function showPalettePicker() {
     row.onclick = () => {
       palIdx = i;
       refreshSwatches(); refreshDisplay();
-      setWorking([0, 0, 0, 1]);
+      setWorking([1, 0, 0, 0]);
       closeMenu(); touch();
     };
     stack.appendChild(row);
@@ -675,24 +826,40 @@ function openSheet(title) {
 function showManual() {
   const { body } = openSheet('');
   body.appendChild(el('div', 'manual',
-`P = Paint
-Draw with your finger to make a lasso, and lift your finger up to fill that shape with the active color.
+`Paint
+Draw a lasso and lift to fill that shape with your color. Your color is the square next to the arrow.
 
-Pick a color from the palette at the top, or sample any color on the canvas with a long hold. The active color is the bottom left square.
+Tap a color in the palette to load it, or hold anywhere on the canvas to pick up a color from the painting.
 
-M = Mix
-Same as paint, but your lasso selection creates a mix of all the colors in that shape.
+Mix
+Tap your color square. It turns into bands fading to grey, and now the lasso blends everything inside it into one color instead of adding paint. Tap the square again, or tap a palette color, to go back to painting.
 
-X = Menu
-Make a new file, save your current file to the app, load a saved canvas, or export your current file as an image. Choose "Save Image" in the share sheet to put it in your camera roll.
+Undo
+Tap the canvas with two fingers to undo, three fingers to redo. Undo is also in the menu. The last three steps are kept.
+
+Menu
+The arrow opens the menu: make a new canvas, save, load, export an image, or undo. Choose "Save Image" in the share sheet to put an export in your camera roll.
 
 Palettes
-You can hold down anywhere on the top palette to open the palette options.
+Hold down anywhere on the palette to choose a different set of paints.
 
 Navigation
 Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.
 
-On a computer, scroll to pan, and pinch on the trackpad or hold Ctrl/Cmd while scrolling to zoom. The canvas starts filling the width of the window; zoom out to see all of it.
+Apple Pencil
+Once you draw with a pencil, the pencil paints and a finger moves the canvas instead. Holding a finger still on the canvas still picks up a color.
+
+Keyboard and mouse
+B  paint
+M  mix
+X  switch between paint and mix
+1 2 3 4  palette colors
+Alt/Option + click  pick up a color
+Space + drag, or scroll  move the canvas
+Ctrl/Cmd + scroll, + and -  zoom
+0  reset the view
+Ctrl/Cmd + Z  undo (add Shift to redo)
+Ctrl/Cmd + S  save
 
 Home Screen
 For the full-screen version, open the share menu in Safari and choose "Add to Home Screen". Paintings saved in the app are kept on this device.`));
@@ -814,7 +981,8 @@ async function showGallery() {
           if (!decode(data, rec)) { toast("Couldn't load"); return; }
           if (validPal(save.palette)) palIdx = save.palette;
           refreshSwatches(); refreshDisplay();
-          setWorking([0, 0, 0, 1]);
+          setWorking([1, 0, 0, 0]);
+          clearHistory();
           touch(); sheet.remove();
         },
         Export: async () => {                        // rendered separately; the open painting is untouched
@@ -865,7 +1033,7 @@ addEventListener('pagehide', autosave);
 
 // ───────────────────────── Start ─────────────────────────
 refreshSwatches();
-setWorking([0, 0, 0, 1]);
+setWorking([1, 0, 0, 0]);
 setTool('paint');
 resetCanvas();
 layout();
@@ -873,14 +1041,14 @@ readWork('_current').then(data => {
   if (dirty || !decode(data, rec)) return;
   if (validPal(data.palette)) palIdx = data.palette;
   refreshSwatches(); refreshDisplay();
-  setWorking([0, 0, 0, 1]);
+  setWorking([1, 0, 0, 0]);
 }).catch(() => {});
 
 const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 if ('serviceWorker' in navigator && !local) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Small hook for automated checks.
-window.__lasso = { W, H, rec, pix, encode, decode, rgbOf, PALETTES, groundOf, state: () => ({ tool, working, zoom, panX, panY, palIdx }) };
+window.__lasso = { W, H, rec, pix, encode, decode, rgbOf, PALETTES, groundOf, undo, redo, state: () => ({ tool, working, zoom, panX, panY, palIdx, homeY, undo: undoStack.length, redo: redoStack.length }) };
 })();
 </script>
 </body>
