@@ -34,6 +34,12 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 #tools>*{flex:none;width:25%;pointer-events:auto;cursor:pointer}
 #bX{background:#000;display:flex;align-items:center;justify-content:center}
 #bX svg{width:28px;height:28px;display:block}
+/* Paint mode: a square of your colour. Mix mode: the same colour as a triangle
+   filling the same square, its point at the top. */
+#well{position:relative;z-index:1}
+#well svg{position:absolute;inset:0;width:100%;height:100%;display:none}
+#well.mix{background:transparent!important}
+#well.mix svg{display:block}
 .g{display:inline-block;transition:transform .2s}
 #stage{flex:1;min-height:0;position:relative}
 #view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
@@ -47,8 +53,9 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 /* menus */
 .overlay{position:absolute;inset:0;z-index:5}
 .overlay.dim{background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center}
-.menu{position:absolute;animation:pop .15s ease-out}
-.menu button{height:60px}
+/* The menu is a grid of squares the size of the dock's, filled from the arrow
+   outward: the row next to the dock right to left, then the next row. */
+.msq{position:absolute;background:#000;font-size:14px;display:flex;align-items:center;justify-content:center;animation:pop .15s ease-out}
 @keyframes pop{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
 
 /* full-screen sheets */
@@ -57,7 +64,15 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .sheet header{flex:none;height:56px;display:flex;align-items:center;justify-content:center;position:relative;font-size:18px}
 .sheet header button{position:absolute;right:8px;top:6px;width:44px;height:44px;font-size:20px}
 .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
-.manual{padding:12px 24px 40px;font-weight:400;line-height:1.35;white-space:pre-wrap;max-width:560px;margin:0 auto}
+.manual{padding:4px 24px 48px;font-weight:400;line-height:1.4;max-width:560px;margin:0 auto}
+.manual p{margin:0 0 14px}
+.manual summary{list-style:none;display:flex;align-items:center;gap:8px;height:48px;cursor:pointer}
+.manual summary::-webkit-details-marker{display:none}
+.manual summary svg{width:18px;height:18px;flex:none;transition:transform .15s}
+.manual details[open] summary svg{transform:rotate(90deg)}
+.manual details>div{padding:0 0 12px}
+.manual dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 14px}
+.manual dt{white-space:nowrap}
 .grid{display:flex;flex-wrap:wrap;gap:12px;padding:12px 16px}
 .cell{width:80px;height:100px;background:#1a1a1a;cursor:pointer}
 .cell img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;display:block;pointer-events:none}
@@ -69,11 +84,13 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .phead svg{width:22px;height:22px}
 .pdrop{position:absolute;left:0;top:56px;min-width:220px;z-index:3;background:#000;animation:pop .15s ease-out}
 .pdrop button{height:52px;text-align:left;padding:0 16px;font-weight:400}
-.pbody{width:min(100%,480px,calc((100vh - 56px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 1.983));margin:0 auto}
+.pbody{--avail:calc(100vh - 56px - 52px - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom));width:min(100%,480px,calc(var(--avail) / 1.983));margin:0 auto}
+@supports (height:100dvh){.pbody{--avail:calc(100dvh - 56px - 52px - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}}
 .tris{display:block;width:100%}
 .tubes{display:flex}
-.tube{flex:1;aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;background:#000}
-.tube input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer;touch-action:none}
+.tube{flex:1;aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;background:#000;-webkit-touch-callout:none;-webkit-user-drag:none}
+.tris{-webkit-touch-callout:none;-webkit-user-drag:none}
+.tube input{position:absolute;left:50%;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;pointer-events:none}
 .tube i,.tube b{position:absolute;pointer-events:none}
 .tube i{left:0;right:0;bottom:0}
 .tube b{left:0;top:0;padding:4px 6px;font-size:12px;font-weight:400;display:none}
@@ -88,16 +105,17 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .itemmenu button{height:52px}
 
 /* Wide screens (tablet, desktop): the canvas takes the whole window and the
-   controls become one centred dock: palette, the black menu button, the well. */
-html.wide #app{--sq:min(88px,calc(100vw/8));width:100vw;height:100%;aspect-ratio:auto;display:block}
+   controls become one centred dock along the top: palette, a gap, well, menu. */
+html.wide #app{--sq:min(88px,calc(100vw/9));width:100vw;height:100%;aspect-ratio:auto;display:block}
 html.wide #stage{position:absolute;inset:0}
-html.wide .bar{position:absolute;bottom:env(safe-area-inset-bottom);height:var(--sq);aspect-ratio:auto;z-index:2;width:calc(var(--sq)*4)}
-html.wide #swatches{left:calc(50% - var(--sq)*3)}
-html.wide #tools{left:calc(50% + var(--sq) - 1px);bottom:env(safe-area-inset-bottom);width:calc(var(--sq)*2 + 1px)}
-html.wide #tools>*{flex:1;width:auto}
-html.wide #tools>#well{flex:none;width:var(--sq)}
-html.wide .menu button{font-size:14px;height:52px}
-html.wide #toast{bottom:calc(var(--sq) + 16px)}
+html.wide .bar{position:absolute;top:env(safe-area-inset-top);bottom:auto;height:var(--sq);aspect-ratio:auto;z-index:2;width:calc(var(--sq)*4)}
+html.wide #swatches{left:calc(50% - var(--sq)*3.5)}
+html.wide #tools{left:calc(50% + var(--sq)*1.5);width:calc(var(--sq)*2)}
+html.wide #tools>*{width:var(--sq)}
+html.wide #bX svg{transform:rotate(180deg)}
+html.wide .msq{animation-name:popdown}
+@keyframes popdown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:none}}
+html.wide #toast{bottom:calc(env(safe-area-inset-bottom) + 16px)}
 
 /* Phone turned sideways: the layout stays put relative to the phone (the whole
    app is counter-rotated) and only the lettering turns to face the viewer. */
@@ -105,7 +123,6 @@ html.ccw .g{transform:rotate(90deg)}
 html.cw .g{transform:rotate(-90deg)}
 html.ccw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(90deg)}
 html.cw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(-90deg)}
-html.ccw .menu button,html.cw .menu button{font-size:14px}
 </style>
 </head>
 <body>
@@ -117,8 +134,8 @@ html.ccw .menu button,html.cw .menu button{font-size:14px}
     <div id="toast"></div>
   </div>
   <div class="bar" id="tools">
+    <div id="well"><svg class="g" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="50,0 0,100 100,100"/></svg></div>
     <div id="bX"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 7.5 21 16.5H17.9L12 10.6 6.1 16.5H3z"/></svg></div>
-    <div id="well"></div>
   </div>
 </div>
 
@@ -222,7 +239,6 @@ const PURE = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
 // when a lasso mixes.
 const LINEN_RGB = [190, 179, 175];
 const LINEN_PX = (0xFF000000 | LINEN_RGB[2] << 16 | LINEN_RGB[1] << 8 | LINEN_RGB[0]) >>> 0;
-const BLEND_RGB = [166, 155, 151];                    // foot of the mix bands: a shade darker, so it shows against the canvas
 const isBare = (a, b, c, d) => a + b + c + d === 0;
 
 // ───────────────────────── Canvas state ─────────────────────────
@@ -675,16 +691,10 @@ const app = $('app'), swatches = [...$('swatches').children];
 // Eight bands fading from that colour to a grey just darker than the canvas: the lasso mixes.
 const well = $('well');
 function refreshWell() {
-  const c = rgbOf(working[0], working[1], working[2], working[3], pal);
-  const from = [c & 255, c >> 8 & 255, c >> 16 & 255];
-  if (tool === 'paint') { well.style.background = `rgb(${from})`; return; }
-  const bands = [];
-  for (let i = 0; i < 8; i++) {
-    const rgb = from.map((v, k) => Math.round(v + (BLEND_RGB[k] - v) * i / 7));
-    bands.push(`rgb(${rgb}) ${i * 12.5}% ${(i + 1) * 12.5}%`);
-  }
-  // "top" is the viewer's top, also when the phone is on its side
-  well.style.background = `linear-gradient(${turn === 0 ? 'to bottom' : turn < 0 ? 'to left' : 'to right'},${bands})`;
+  const col = cssOf(working);
+  well.classList.toggle('mix', tool === 'mix');
+  well.style.background = col;
+  well.querySelector('polygon').setAttribute('fill', col);
 }
 function setWorking(r) {
   working = [r[0], r[1], r[2], r[3]];
@@ -724,8 +734,8 @@ swatches.forEach((s, i) => {
 });
 const toggleTool = () => setTool(tool === 'paint' ? 'mix' : 'paint');
 well.onclick = toggleTool;
-$('bX').onclick = () => showMenu(['Manual', 'Paints', 'Export', 'Load', 'Save', 'New', 'Undo'],
-  [showManual, showPaints, () => exportImage(art), showGallery, saveWork, confirmNew, undo]);
+$('bX').onclick = () => showMenu(['New', 'Save', 'Load', 'Export', 'Manual'],
+  [confirmNew, saveWork, showGallery, () => exportImage(art), showManual]);
 
 // ───────────────────────── Keyboard ─────────────────────────
 function zoomBy(f) { zoomAbout(vw / 2, vh / 2, fracX(vw / 2), fracY(vh / 2), zoom * f); }
@@ -763,23 +773,20 @@ function closeMenu() { if (overlay) { overlay.remove(); overlay = null; } }
 function showMenu(items, actions) {
   closeMenu();
   overlay = el('div', 'overlay');
-  const stack = el('div', 'menu');
-  items.forEach((t, i) => {
-    const b = el('button');
-    b.appendChild(el('span', 'g', t));
-    b.onclick = ev => { ev.stopPropagation(); closeMenu(); actions[i](); };
-    stack.appendChild(b);
-  });
-  overlay.appendChild(stack);
   overlay.onclick = closeMenu;
   app.appendChild(overlay);
-  // Sit directly above the menu button, whichever layout is active.
-  const btn = $('bX');
+  const btn = $('bX'), size = btn.offsetWidth, down = root.classList.contains('wide');
   let x = 0, y = 0;
   for (let n = btn; n && n !== app; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
-  stack.style.left = x + 'px';
-  stack.style.width = btn.offsetWidth + 'px';
-  stack.style.bottom = (app.clientHeight - y) + 'px';
+  // First item next to the arrow, then leftward four to a row, then the next row out.
+  items.forEach((t, i) => {
+    const b = el('button', 'msq'), col = i % 4, row = Math.floor(i / 4) + 1;
+    b.appendChild(el('span', 'g', t));
+    b.style.cssText = `left:${x - col * size}px;top:${down ? y + row * btn.offsetHeight : y - row * btn.offsetHeight}px;` +
+      `width:${size}px;height:${btn.offsetHeight}px`;
+    b.onclick = ev => { ev.stopPropagation(); closeMenu(); actions[i](); };
+    overlay.appendChild(b);
+  });
 }
 
 // Picks the layout: phone column, wide-screen dock, or phone on its side.
@@ -815,7 +822,7 @@ function layout() {
   resize();
 }
 function confirmNew() {
-  showMenu(['Cancel', 'New'], [closeMenu, () => { remember(wholeCanvas()); resetCanvas(); touch(); }]);
+  showMenu(['New', 'Cancel'], [() => { remember(wholeCanvas()); resetCanvas(); touch(); }, closeMenu]);
 }
 // The Paints sheet. Two triangles show how the paints mix: the three paints in
 // the corners, 1:1 mixes between them, 2:1:1 mixes in the middle, and on the
@@ -881,8 +888,12 @@ function showPaints() {
       lvl.style.height = (strengthPos(paints.s[i]) * 100).toFixed(1) + '%';
       num.textContent = String(paints.s[i]);
     };
+    // Safari's own long press (lift, copy, callout) is switched off so a hold is ours.
+    t.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    const openPicker = () => { try { if (inp.showPicker) { inp.showPicker(); return; } } catch {} inp.click(); };
+    t.addEventListener('click', () => { if (!held) openPicker(); });   // mouse
     t.addEventListener('pointerdown', e => {
-      held = false; id = e.pointerId; y = y0 = e.clientY;
+      held = false; id = e.pointerId; y = y0 = e.clientY; t.dataset.moved = '';
       const sx = e.clientX;
       clearTimeout(timer);
       timer = setTimeout(() => {                     // held: the tube becomes a strength slider
@@ -897,7 +908,7 @@ function showPaints() {
       if (e.pointerId !== id) return;
       y = e.clientY;
       if (!held) {
-        if (Math.hypot(e.clientX - +t.dataset.sx, y - y0) > 10) clearTimeout(timer);
+        if (Math.hypot(e.clientX - +t.dataset.sx, y - y0) > 10) { clearTimeout(timer); t.dataset.moved = '1'; }
         return;
       }
       e.preventDefault();
@@ -910,11 +921,11 @@ function showPaints() {
     const end = e => {
       if (e.pointerId !== id) return;
       clearTimeout(timer); id = -1;
-      if (held) { t.classList.remove('hold'); render(); }
+      if (held) { t.classList.remove('hold'); render(); setTimeout(() => { held = false; }, 0); }
+      else if (e.type === 'pointerup' && e.pointerType !== 'mouse' && !t.dataset.moved) openPicker();   // a tap
     };
     t.addEventListener('pointerup', end);
     t.addEventListener('pointercancel', end);
-    inp.addEventListener('click', e => { if (held) { e.preventDefault(); held = false; } });
     return { t, inp, lvl };
   });
 
@@ -1048,48 +1059,53 @@ function openSheet(title) {
 }
 function showManual() {
   const { body } = openSheet('');
-  body.appendChild(el('div', 'manual',
-`Paint
-Draw a lasso and lift to fill that shape with your color. Your color is the square next to the arrow.
-
-Tap a color in the palette to load it, or hold anywhere on the painting to pick up a color. The bare linen canvas isn't paint, so it can't be picked up.
-
-Mix
-Tap your color square. It turns into bands fading to grey, and now the lasso blends all the paint inside it into one color and fills the whole shape with it. Bare canvas inside the lasso doesn't count toward the mix. Tap the square again, or tap a palette color, to go back to painting.
-
-Undo
-Tap the canvas with two fingers to undo, three fingers to redo. Undo is also in the menu. The last three steps are kept.
-
-Menu
-The arrow opens the menu: change your paints, make a new canvas, save, load, export an image, or undo. Choose "Save Image" in the share sheet to put an export in your camera roll.
-
-Paints
-Hold anywhere on the palette, or choose Paints in the menu. The top half of the diamond shows how your paints mix: the three paints in the corners, even mixes between them, and in between mixes leaning toward the nearest corner. The bottom half is the same mixes, mirrored, with an equal amount of the fourth paint.
-
-Each paint under the chart is filled to its strength: how much it takes over in a mix. Tap a paint to change its color. Hold a paint and drag up or down to make it stronger or weaker; slide your finger to the side to see the level while you drag. Your painting and the triangles change as you go.
-
-Once you change something, Save keeps your paints as a named palette, Share sends them as a link, and Reset puts them back. Tap the palette name at the top to switch between your palettes; hold a name there to delete it.
-
-Navigation
-Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.
-
-Apple Pencil
-Once you draw with a pencil, the pencil paints and a finger moves the canvas instead. Holding a finger still on the canvas still picks up a color.
-
-Keyboard and mouse
-B  paint
-M  mix
-X  switch between paint and mix
-1 2 3 4  palette colors
-Alt/Option + click  pick up a color
-Space + drag, or scroll  move the canvas
-Ctrl/Cmd + scroll, + and -  zoom
-0  reset the view
-Ctrl/Cmd + Z  undo (add Shift to redo)
-Ctrl/Cmd + S  save
-
-Home Screen
-For the full-screen version, open the share menu in Safari and choose "Add to Home Screen". Paintings saved in the app are kept on this device.`));
+  const m = el('div', 'manual');
+  const para = (parent, text) => parent.appendChild(el('p', '', text));
+  const section = (title, fill) => {
+    const d = el('details'), sum = el('summary'), inner = el('div');
+    sum.innerHTML = ARROW_RIGHT;
+    sum.appendChild(el('span', '', title));
+    d.append(sum, inner);
+    fill(inner);
+    m.appendChild(d);
+  };
+  const keys = (parent, rows) => {
+    const dl = el('dl');
+    for (const [k, v] of rows) dl.append(el('dt', '', k), el('dd', '', v));
+    parent.appendChild(dl);
+  };
+  section('The Basics', d => {
+    para(d, 'You have four colors in your palette. Press one to make it your active color. Draw a lasso shape on the canvas to fill your selection with the active color.');
+    para(d, 'Press the active color to use the Mix mode (triangle). Now your lasso selection will blend the colors within your selection, and the new mix becomes your active color. Press the triangle to return to Paint mode.');
+  });
+  section('Custom Palettes', d => {
+    para(d, 'A long hold anywhere on your palette opens a color chart, and gives you the option to choose new colors by tapping them, and to adjust their "strength" by holding a color and sliding up or down.');
+    para(d, 'Once you start making changes, options will appear to save a palette, reset to default, or share it. Sharing creates a link that will open a version of the app with your current palette. This feature will eventually be an easy way to trade palettes with friends.');
+  });
+  section('Make this an app on your phone', d => {
+    para(d, 'For iPhones, if you open this in Safari, press "Share", and then choose "Add to Home Screen", it will create an app icon that opens a full screen version. Paintings saved will be stored on your device so you don\'t lose progress when a browser closes.');
+  });
+  section('Gestures and Hot Keys', d => {
+    para(d, 'Hold anywhere on the painting to pick up a color. The bare linen canvas isn\'t paint, so it can\'t be picked up, and it doesn\'t count toward a mix.');
+    para(d, 'Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.');
+    para(d, 'Tap the canvas with two fingers to undo, three fingers to redo. The last three steps are kept.');
+    para(d, 'The arrow opens the menu: New, Save, Load, Export and this Manual. Choose "Save Image" in the share sheet to put an export in your camera roll.');
+    para(d, 'With an Apple Pencil: once you draw with the pencil, the pencil paints and a finger moves the canvas instead. Holding a finger still on the canvas still picks up a color.');
+    para(d, 'Keyboard and mouse:');
+    keys(d, [
+      ['B', 'paint'], ['M', 'mix'], ['X', 'switch between paint and mix'], ['1 2 3 4', 'palette colors'],
+      ['Alt/Option + click', 'pick up a color'], ['Space + drag, or scroll', 'move the canvas'],
+      ['Ctrl/Cmd + scroll, + and -', 'zoom'], ['0', 'reset the view'],
+      ['Ctrl/Cmd + Z', 'undo (add Shift to redo)'], ['Ctrl/Cmd + S', 'save'],
+    ]);
+  });
+  section('About Lasso', d => {
+    para(d, 'I made this because I was looking for a painting app on my phone that was simple enough to be fun. No layers, no adjustments, no brush engines, just mixing colors and making shapes.');
+    para(d, 'My plan for future versions is to have some great palette options built in, to make sharing palettes easier, and to create an export setting that puts your painting in a frame on a wall, as a fast way to give it more of a polished presentation. Thank you for that idea Ian!');
+    para(d, 'The code was made with Claude, and in the spirit of making something cool and useful to you personally, please feel free to use the code as a base for your own version. If you make something you like, I would love to hear about it!');
+    para(d, 'Thank you,\nJames Noellert').style.whiteSpace = 'pre-line';
+  });
+  body.appendChild(m);
 }
 
 // ───────────────────────── Export ─────────────────────────
@@ -1110,7 +1126,7 @@ async function deliver(file) {
     catch (err) {
       if (err.name === 'AbortError') return;         // user closed the share sheet
       if (err.name === 'NotAllowedError') {          // browser wants a fresh tap
-        showMenu(['Cancel', 'Share'], [closeMenu, () => deliver(file)]);
+        showMenu(['Share', 'Cancel'], [() => deliver(file), closeMenu]);
         return;
       }
     }
