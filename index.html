@@ -50,12 +50,6 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .menu{position:absolute;animation:pop .15s ease-out}
 .menu button{height:60px}
 @keyframes pop{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
-.picker{width:70%}
-.prow{height:64px;display:flex;align-items:center;background:#000;cursor:pointer}
-.prow .chips{width:50%;height:100%;display:flex}
-.prow .chips i{flex:1}
-.prow span{flex:1;text-align:center;font-size:14px}
-.picker button{height:52px}
 
 /* full-screen sheets */
 .sheet{position:fixed;inset:0;z-index:10;background:#000;display:flex;flex-direction:column;
@@ -68,24 +62,27 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 .cell{width:80px;height:100px;background:#1a1a1a;cursor:pointer}
 .cell img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;display:block;pointer-events:none}
 .empty{padding:40px 24px;text-align:center;font-weight:400;color:#888;width:100%}
-.paints{padding:0 16px 48px;max-width:560px;margin:0 auto;font-weight:400;font-size:14px}
-.paints button{height:44px}
-.ptabs{display:flex;margin-bottom:8px}
-.ptabs button{flex:1;color:#888}
-.ptabs button.on{color:#fff}
-.pctl{display:flex;align-items:center;gap:12px;height:48px}
-.pctl input[type=color]{flex:none;width:40px;height:40px;padding:0;border:0;border-radius:0;background:none;-webkit-appearance:none;appearance:none}
-.pctl input::-webkit-color-swatch-wrapper{padding:0}
-.pctl input::-webkit-color-swatch{border:0;border-radius:0}
-.pctl input[type=range]{flex:1;min-width:0;accent-color:#fff;touch-action:none}
-.pctl span{width:44px;text-align:right}
-.chart h3{font:inherit;color:#888;margin:24px 0 8px}
-.strip{display:flex;height:26px}
-.strip i{flex:1}
-.sp{height:8px}
-.tri{margin-bottom:12px}
-.trow{display:flex;justify-content:center;height:26px}
-.trow i{width:11.11%}
+/* Paints sheet: palette name (and menu of saved palettes), two mixing triangles,
+   the four tubes, then Save / Share / Reset when there is something to do. */
+.phead{flex:none;height:56px;width:100%;max-width:480px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;position:relative}
+.phead>button{width:auto;height:56px;padding:0 16px;font-size:18px;display:flex;align-items:center;gap:6px}
+.phead svg{width:22px;height:22px}
+.pdrop{position:absolute;left:0;top:56px;min-width:220px;z-index:3;background:#000;animation:pop .15s ease-out}
+.pdrop button{height:52px;text-align:left;padding:0 16px;font-weight:400}
+.pbody{width:min(100%,480px,calc((100vh - 56px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 1.983));margin:0 auto}
+.tris{display:block;width:100%}
+.tubes{display:flex}
+.tube{flex:1;aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;background:#000}
+.tube input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer;touch-action:none}
+.tube i,.tube b{position:absolute;pointer-events:none}
+.tube i{left:0;right:0;bottom:0}
+.tube b{left:0;top:0;padding:4px 6px;font-size:12px;font-weight:400;display:none}
+.tube.hold b{display:block}
+.pacts{display:flex}
+.pacts button{flex:1;height:52px}
+.itemmenu .pform{width:280px}
+.pform input{display:block;width:100%;height:48px;border:0;border-radius:0;background:#222;color:#fff;font:400 16px inherit;padding:0 12px;-webkit-user-select:text;user-select:text}
+.pform .perr{height:28px;line-height:28px;font-size:13px;font-weight:400;color:#f99}
 .itemmenu{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center}
 .itemmenu div{width:160px}
 .itemmenu button{height:52px}
@@ -100,13 +97,12 @@ html.wide #tools{left:calc(50% + var(--sq) - 1px);bottom:env(safe-area-inset-bot
 html.wide #tools>*{flex:1;width:auto}
 html.wide #tools>#well{flex:none;width:var(--sq)}
 html.wide .menu button{font-size:14px;height:52px}
-html.wide .picker{width:280px}
 html.wide #toast{bottom:calc(var(--sq) + 16px)}
 
 /* Phone turned sideways: the layout stays put relative to the phone (the whole
    app is counter-rotated) and only the lettering turns to face the viewer. */
-html.ccw .g,html.ccw .picker{transform:rotate(90deg)}
-html.cw .g,html.cw .picker{transform:rotate(-90deg)}
+html.ccw .g{transform:rotate(90deg)}
+html.cw .g{transform:rotate(-90deg)}
 html.ccw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(90deg)}
 html.cw #toast{bottom:calc(var(--bar,0px) + 40px);transform:translateX(-50%) rotate(-90deg)}
 html.ccw .menu button,html.cw .menu button{font-size:14px}
@@ -134,7 +130,7 @@ html.ccw .menu button,html.cw .menu button{font-size:14px}
 const W = 576, H = 720, N = W * H;              // exactly 4:5
 const EXPORT_SCALE = 4;          // nearest-neighbour upscale on export (2304 x 2880)
 const LONG_PRESS_MS = 600;       // eyedropper hold
-const SWATCH_HOLD_MS = 500;      // palette picker hold
+const SWATCH_HOLD_MS = 500;      // hold on the palette, or on a tube in the Paints sheet
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -143,74 +139,66 @@ const el = (tag, cls, text) => {
   return e;
 };
 
-// ───────────────────────── Pigments ─────────────────────────
-// Each pigment has a masstone (its colour straight from the tube) and, per colour
-// channel, a scattering strength S. Low S means a transparent, dark-in-mass paint
-// that opens up as soon as white is added (the blue); high S means an opaque paint
-// that holds its own in mixes (the yellow). Absorption K follows from the masstone.
-// Mixing uses the Kubelka-Munk paint equations, so colours darken the way real
-// paint does: red + blue goes nearly black, and a touch of yellow neutralises it.
-const PALETTES = [
-  { name: 'Primary',     // cadmium red, cadmium yellow, phthalo blue, titanium white
-    // The red is opaque in its own channel, so it survives in a mix with blue and
-    // turns it into a warm near-black. The blue is transparent, most of all in the
-    // blue channel, so white opens it into clean, saturated sky tints.
-    mass: [[244, 14, 30], [255, 186, 0], [4, 36, 82]],
-    S: [[0.4, 0.1, 0.05895], [0.08626, 0.6, 0.038], [0.04, 0.01, 0.004]] },
-  { name: 'Zorn',        // venetian red, yellow ochre, ivory black, titanium white
-    mass: [[177, 49, 40], [202, 159, 48], [11, 12, 38]],
-    S: [[0.21887, 0.05039, 0.04375], [0.25096, 0.21714, 0.0429], [0.01356, 0.01224, 0.03307]] },
-];
+// ───────────────────────── Paints ─────────────────────────
+// A palette is four paints. Each has a tube colour (its masstone) and one
+// strength: how much it dominates a mix. Mixing uses the Kubelka-Munk paint
+// equations, so colours darken the way real paint does (red + blue goes nearly
+// black). A palette is written as "rrggbb_strength" four times; that one string
+// is what a painting is saved with, what a named palette stores, and what a
+// shared link carries.
+const DEFAULT_CODE = 'f40e1e_0.011,ffba00_0.51,012f7b_0.0065,ffffff_0.74';
+const S_MIN = 0.001, S_MAX = 5;                      // strength range of the Paints sheet
 const R_WHITE = 0.98, R_MIN = 0.002;                 // reflectance of white paint; darkest allowed masstone
 const toLinear = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 const toSRGB = c => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
 const kOverS = r => (1 - r) * (1 - r) / (2 * r);
-function buildPalette(p) {
-  p.K = new Float64Array(12); p.Sc = new Float64Array(12);   // [pigment * 3 + channel]
-  for (let i = 0; i < 4; i++) for (let c = 0; c < 3; c++) {
-    const white = i === 3 && !p.mass[3];             // the fourth paint is white unless the palette says otherwise
-    const r = white ? R_WHITE : Math.min(Math.max(toLinear(p.mass[i][c] / 255) * R_WHITE, R_MIN), R_WHITE);
-    const sc = white ? 1 : p.S[i][c];
-    p.Sc[i * 3 + c] = sc;
-    p.K[i * 3 + c] = kOverS(r) * sc;
-  }
-  p.ground = null;
-}
-PALETTES.forEach(buildPalette);
-let palIdx = 0;
-
-// The Custom palette is the user's own: four tube colours, each with one strength
-// (how much it dominates a mix). It is written as "rrggbb_strength" four times,
-// which is also what a shared link carries.
 const PAINTS_RE = /^[0-9a-f]{6}_\d*\.?\d+(,[0-9a-f]{6}_\d*\.?\d+){3}$/i;
 function parsePaints(str) {
-  if (!str || !PAINTS_RE.test(str)) return null;
+  if (typeof str !== 'string' || !PAINTS_RE.test(str)) return null;
   const c = [], st = [];
   for (const part of str.split(',')) {
     const [h, v] = part.split('_');
-    c.push('#' + h.toLowerCase()); st.push(Math.min(Math.max(+v, 0.001), 10));
+    c.push('#' + h.toLowerCase()); st.push(Math.min(Math.max(+v, S_MIN), S_MAX));
   }
   return { c, s: st };
 }
-const DEFAULT_PAINTS = 'f40e1e_0.13,ffba00_0.13,042452_0.012,ffffff_1';
-const linkedPaints = parsePaints(location.hash.startsWith('#paints=') ? location.hash.slice(8) : '');
-let custom = linkedPaints;
-if (!custom) { try { custom = parsePaints(localStorage.getItem('lasso-paints')); } catch {} }
-if (!custom) custom = parsePaints(DEFAULT_PAINTS);
-const paintsCode = () => custom.c.map((h, i) => h.slice(1) + '_' + +custom.s[i].toPrecision(3)).join(',');
-const CUSTOM = PALETTES.length;
-PALETTES.push({ name: 'Custom' });
-function applyCustom() {
-  const p = PALETTES[CUSTOM];
-  p.mass = custom.c.map(h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16)));
-  p.S = custom.s.map(v => [v, v, v]);
-  buildPalette(p);
-  try { localStorage.setItem('lasso-paints', paintsCode()); } catch {}
+const codeOf = p => p.c.map((h, i) => h.slice(1) + '_' + +p.s[i].toPrecision(2)).join(',');
+function makePalette(p) {                            // precomputed K and S, [paint * 3 + channel]
+  const pal = { K: new Float64Array(12), Sc: new Float64Array(12), ground: null };
+  for (let i = 0; i < 4; i++) for (let c = 0; c < 3; c++) {
+    const v = parseInt(p.c[i].slice(1 + c * 2, 3 + c * 2), 16) / 255;
+    const r = Math.min(Math.max(toLinear(v) * R_WHITE, R_MIN), R_WHITE);
+    pal.Sc[i * 3 + c] = p.s[i];
+    pal.K[i * 3 + c] = kOverS(r) * p.s[i];
+  }
+  return pal;
 }
-applyCustom();
+let paints = parsePaints(DEFAULT_CODE);              // the paints in use
+let pal = makePalette(paints);
+let palName = 'Default';                             // the named palette they came from
+
+// Named palettes the user has saved on this device.
+let savedPalettes = [];
+try {
+  const a = JSON.parse(localStorage.getItem('lasso-palettes') || '[]');
+  if (Array.isArray(a)) savedPalettes = a.filter(x => x && typeof x.name === 'string' && parsePaints(x.code));
+} catch {}
+const storePalettes = () => { try { localStorage.setItem('lasso-palettes', JSON.stringify(savedPalettes)); } catch {} };
+const codeNamed = name => {
+  const code = name === 'Default' ? DEFAULT_CODE : (savedPalettes.find(x => x.name === name) || {}).code;
+  return code && codeOf(parsePaints(code));
+};
+const isModified = () => codeOf(paints) !== codeNamed(palName);
+function nameFor(code, fallback) {                   // the name of a palette with exactly these paints
+  const c = codeOf(parsePaints(code));
+  if (c === codeNamed('Default')) return 'Default';
+  const hit = savedPalettes.find(x => codeOf(parsePaints(x.code)) === c);
+  return hit ? hit.name : fallback || 'Default';
+}
 
 // Recipe (4 pigment weights) -> packed 0xAABBGGRR pixel.
 function rgbOf(w0, w1, w2, w3, pal) {
+  if (w0 + w1 + w2 + w3 === 0) return LINEN_PX;     // no paint: bare canvas
   const K = pal.K, S = pal.Sc;
   let out = 0xFF000000;
   for (let c = 0; c < 3; c++) {
@@ -218,47 +206,24 @@ function rgbOf(w0, w1, w2, w3, pal) {
     const sc = w0 * S[c] + w1 * S[3 + c] + w2 * S[6 + c] + w3 * S[9 + c];
     const q = k / sc;
     let r = (1 + q - Math.sqrt(q * q + 2 * q)) / R_WHITE;
-    r = r > 0 ? (r < 1 ? r : 1) : 0;                 // also catches an empty recipe
+    r = r > 0 ? (r < 1 ? r : 1) : 0;
     out |= ((toSRGB(r) * 255 + 0.5) | 0) << (c * 8);
   }
   return out >>> 0;
 }
-const cssOf = (r, pal = PALETTES[palIdx]) => {
-  const c = rgbOf(r[0], r[1], r[2], r[3], pal);
+const cssOf = (r, p = pal) => {
+  const c = rgbOf(r[0], r[1], r[2], r[3], p);
   return `rgb(${c & 255},${c >> 8 & 255},${c >> 16 & 255})`;
 };
 const PURE = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
 
-// A new canvas is a warm grey ground, stored as the pigment recipe that comes
-// closest to it, so it mixes with paint like a toned canvas would.
-const GROUND_RGB = [126, 110, 119];
-const BLEND_RGB = [106, 92, 100];                    // foot of the mix bands: a shade darker, so it shows against the canvas
-function groundOf(pal) {
-  if (pal.ground) return pal.ground;
-  const err = w => {
-    const c = rgbOf(w[0], w[1], w[2], w[3], pal);
-    const dr = (c & 255) - GROUND_RGB[0], dg = (c >> 8 & 255) - GROUND_RGB[1], db = (c >> 16 & 255) - GROUND_RGB[2];
-    return dr * dr + dg * dg + db * db;
-  };
-  let best = [0, 0, 0, 1], bestE = err(best);
-  const n = 40;                                      // coarse search over all mixes...
-  for (let a = 0; a <= n; a++) for (let b = 0; a + b <= n; b++) for (let c = 0; a + b + c <= n; c++) {
-    const w = [a / n, b / n, c / n, (n - a - b - c) / n], e = err(w);
-    if (e < bestE) { bestE = e; best = w; }
-  }
-  for (let step = 1 / 80; step > 1 / 5000; step /= 2) {   // ...then nudge paint between pigments
-    for (let improved = true; improved;) {
-      improved = false;
-      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
-        if (i === j || best[i] < step) continue;
-        const w = best.slice(); w[i] -= step; w[j] += step;
-        const e = err(w);
-        if (e < bestE) { bestE = e; best = w; improved = true; }
-      }
-    }
-  }
-  return pal.ground = best.map(Math.fround);
-}
+// Bare canvas is linen. It is not paint: a pixel with no paint in its recipe
+// shows the linen, can't be picked up with the eyedropper, and is left out
+// when a lasso mixes.
+const LINEN_RGB = [190, 179, 175];
+const LINEN_PX = (0xFF000000 | LINEN_RGB[2] << 16 | LINEN_RGB[1] << 8 | LINEN_RGB[0]) >>> 0;
+const BLEND_RGB = [166, 155, 151];                    // foot of the mix bands: a shade darker, so it shows against the canvas
+const isBare = (a, b, c, d) => a + b + c + d === 0;
 
 // ───────────────────────── Canvas state ─────────────────────────
 const rec = new Float32Array(N * 4);                 // pigment recipe per pixel
@@ -285,13 +250,12 @@ function paintAll(src, dst, pal) {
   }
 }
 function refreshDisplay() {
-  paintAll(rec, pix, PALETTES[palIdx]);
+  paintAll(rec, pix, pal);
   actx.putImageData(img, 0, 0);
   requestDraw();
 }
 function resetCanvas() {
-  const g = groundOf(PALETTES[palIdx]);
-  for (let o = 0; o < N * 4; o += 4) { rec[o] = g[0]; rec[o + 1] = g[1]; rec[o + 2] = g[2]; rec[o + 3] = g[3]; }
+  rec.fill(0);
   goHome();
   refreshDisplay();
 }
@@ -433,7 +397,7 @@ function capture(sp) {
   return { spans: sp, runs, vals };
 }
 function restore(h) {
-  const pal = PALETTES[palIdx], sp = h.spans, runs = h.runs, vals = h.vals;
+  const sp = h.spans, runs = h.runs, vals = h.vals;
   let r = -1, left = 0, a = 0, b = 0, c = 0, d = 0, col = 0;
   for (let s = 0; s < sp.length; s += 3) {
     const row = sp[s] * W;
@@ -477,23 +441,28 @@ function closeLasso() {
   if (lasso.length >= 6) {
     buildSpans();
     if (spans.length) {
-      remember(spans.slice());
-      let r0 = working[0], r1 = working[1], r2 = working[2], r3 = working[3];
-      if (tool === 'mix') {                          // average every recipe inside the shape
-        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, count = 0;
+      let r0 = working[0], r1 = working[1], r2 = working[2], r3 = working[3], count = 1;
+      if (tool === 'mix') {                          // average the paint inside the shape; bare canvas doesn't count
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+        count = 0;
         for (let s = 0; s < spans.length; s += 3) {
           const row = spans[s] * W, end = (row + spans[s + 2]) * 4;
           for (let o = (row + spans[s + 1]) * 4; o < end; o += 4) {
-            s0 += rec[o]; s1 += rec[o + 1]; s2 += rec[o + 2]; s3 += rec[o + 3];
+            const a = rec[o], b = rec[o + 1], c = rec[o + 2], d = rec[o + 3];
+            if (isBare(a, b, c, d)) continue;
+            s0 += a; s1 += b; s2 += c; s3 += d; count++;
           }
-          count += spans[s + 2] - spans[s + 1];
         }
-        r0 = Math.fround(s0 / count); r1 = Math.fround(s1 / count);
-        r2 = Math.fround(s2 / count); r3 = Math.fround(s3 / count);
-        setWorking([r0, r1, r2, r3]);                // the mix is loaded, ready to paint with
+        if (count) {
+          r0 = Math.fround(s0 / count); r1 = Math.fround(s1 / count);
+          r2 = Math.fround(s2 / count); r3 = Math.fround(s3 / count);
+          setWorking([r0, r1, r2, r3]);              // the mix is loaded, ready to paint with
+        }
       }
+      if (count) {                                   // a mix over bare canvas only does nothing
+      remember(spans.slice());
       // The whole shape ends up one recipe, so its colour is computed exactly once.
-      const col = rgbOf(r0, r1, r2, r3, PALETTES[palIdx]);
+      const col = rgbOf(r0, r1, r2, r3, pal);
       let minX = W, maxX = 0;
       for (let s = 0; s < spans.length; s += 3) {
         const row = spans[s] * W, a = spans[s + 1], b = spans[s + 2];
@@ -507,6 +476,7 @@ function closeLasso() {
       const minY = spans[0], maxY = spans[spans.length - 3];
       actx.putImageData(img, 0, 0, minX, minY, maxX - minX, maxY - minY + 1);   // upload only what changed
       touch();
+      }
     }
   }
   lasso.length = 0;
@@ -565,8 +535,13 @@ function updateDrop(x, y) {
   const cx = Math.floor(toCanvasX(x)), cy = Math.floor(toCanvasY(y));
   if (cx >= 0 && cx < W && cy >= 0 && cy < H) {
     const o = (cy * W + cx) * 4;
-    sampled = [rec[o], rec[o + 1], rec[o + 2], rec[o + 3]];
-    loupe.style.background = cssOf(sampled);
+    if (isBare(rec[o], rec[o + 1], rec[o + 2], rec[o + 3])) {   // bare canvas: nothing to pick up
+      sampled = null;
+      loupe.style.background = 'transparent';
+    } else {
+      sampled = [rec[o], rec[o + 1], rec[o + 2], rec[o + 3]];
+      loupe.style.background = cssOf(sampled);
+    }
   }
   // 60px "above" the finger, from the viewer's point of view
   loupe.style.transform = `translate(${x + (turn === 0 ? 0 : turn < 0 ? 60 : -60)}px,${y - (turn === 0 ? 60 : 0)}px)`;
@@ -700,7 +675,7 @@ const app = $('app'), swatches = [...$('swatches').children];
 // Eight bands fading from that colour to a grey just darker than the canvas: the lasso mixes.
 const well = $('well');
 function refreshWell() {
-  const c = rgbOf(working[0], working[1], working[2], working[3], PALETTES[palIdx]);
+  const c = rgbOf(working[0], working[1], working[2], working[3], pal);
   const from = [c & 255, c >> 8 & 255, c >> 16 & 255];
   if (tool === 'paint') { well.style.background = `rgb(${from})`; return; }
   const bands = [];
@@ -724,13 +699,21 @@ function pickTube(i) {
   setWorking(r); setTool('paint');
 }
 function refreshSwatches() {
-  const pal = PALETTES[palIdx];
-  swatches.forEach((s, i) => { s.style.background = cssOf(PURE[i], pal); });
+  swatches.forEach((s, i) => { s.style.background = cssOf(PURE[i]); });
+}
+// Switch paints. The painting is stored as amounts of each paint, so it redraws with them.
+let refreshQueued = 0;
+function setPaints(p, name) {
+  paints = { c: p.c.slice(), s: p.s.slice() };
+  if (name !== undefined) palName = name;
+  pal = makePalette(paints);
+  refreshSwatches(); refreshWell();
+  if (!refreshQueued) refreshQueued = requestAnimationFrame(() => { refreshQueued = 0; refreshDisplay(); });
 }
 swatches.forEach((s, i) => {
   let timer = 0;
   s.addEventListener('pointerdown', () => {
-    timer = setTimeout(() => { timer = 0; showPalettePicker(); }, SWATCH_HOLD_MS);
+    timer = setTimeout(() => { timer = 0; showPaints(); }, SWATCH_HOLD_MS);
   });
   s.addEventListener('pointerup', () => {
     if (!timer) return;
@@ -834,120 +817,216 @@ function layout() {
 function confirmNew() {
   showMenu(['Cancel', 'New'], [closeMenu, () => { remember(wholeCanvas()); resetCanvas(); touch(); }]);
 }
-function usePalette(i) {
-  palIdx = i;
-  refreshSwatches(); refreshDisplay();
-  setWorking([1, 0, 0, 0]);
-  touch();
-}
-
-// The Paints sheet: a chart of how the current paints mix, and for the Custom
-// palette the controls to change them. Everything redraws as a control moves.
+// The Paints sheet. Two triangles show how the paints mix: the three paints in
+// the corners, 1:1 mixes between them, 2:1:1 mixes in the middle, and on the
+// right the same mixes half and half with the fourth paint. Under them the four
+// tubes: tap one for its colour, hold one and drag up or down for its strength.
+const ARROW_RIGHT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M16.5 12 7.5 21V17.9L13.4 12 7.5 6.1V3z"/></svg>';
+const strengthPos = v => (Math.log10(v) - Math.log10(S_MIN)) / (Math.log10(S_MAX) - Math.log10(S_MIN));
+const strengthAt = t => +Math.pow(10, Math.log10(S_MIN) + t * (Math.log10(S_MAX) - Math.log10(S_MIN))).toPrecision(2);
 function showPaints() {
-  const { body } = openSheet('Paints');
-  const wrap = el('div', 'paints'), tabs = el('div', 'ptabs'), ctl = el('div'), chart = el('div', 'chart');
-  wrap.append(tabs, ctl, chart);
-  body.appendChild(wrap);
-
-  const cells = [];                                  // [element, recipe]
-  const cell = (row, w) => { const c = el('i'); row.appendChild(c); cells.push([c, w]); };
-  const steps = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => i / 8);
-  const strip = (a, b, white) => {                   // nine even steps from paint a to paint b
-    const row = el('div', 'strip');
-    for (const t of steps) {
-      const w = [0, 0, 0, 0];
-      w[a] += (1 - t) * (1 - white); w[b] += t * (1 - white); w[3] += white;
-      cell(row, w);
-    }
-    chart.appendChild(row);
-  };
-  chart.appendChild(el('h3', '', 'Each pair, then with one third and two thirds of the fourth paint'));
-  for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
-    for (const white of [0, 1 / 3, 2 / 3]) strip(a, b, white);
-    chart.appendChild(el('div', 'sp'));
-  }
-  chart.appendChild(el('h3', '', 'Each paint into the fourth'));
-  for (let a = 0; a < 3; a++) strip(a, 3, 0);
-  chart.appendChild(el('h3', '', 'All three together, then with half of the fourth paint'));
-  for (const white of [0, 0.5]) {
-    const tri = el('div', 'tri');
-    for (let r = 0; r <= 6; r++) {
-      const row = el('div', 'trow');
-      for (let k = 0; k <= r; k++) cell(row, [(6 - r) / 6 * (1 - white), (r - k) / 6 * (1 - white), k / 6 * (1 - white), white]);
-      tri.appendChild(row);
-    }
-    chart.appendChild(tri);
-  }
-  const paint = () => { const pal = PALETTES[palIdx]; for (const [c, w] of cells) c.style.background = cssOf(w, pal); };
-
-  let queued = 0;
-  const changed = () => {
-    applyCustom();
-    refreshSwatches(); refreshWell(); paint(); touch();
-    if (!queued) queued = requestAnimationFrame(() => { queued = 0; refreshDisplay(); });
-  };
-  const render = () => {
-    tabs.textContent = ''; ctl.textContent = '';
-    PALETTES.forEach((p, i) => {
-      const b = el('button', i === palIdx ? 'on' : '', p.name);
-      b.onclick = () => { usePalette(i); render(); };
-      tabs.appendChild(b);
-    });
-    if (palIdx === CUSTOM) {
-      custom.c.forEach((hex, i) => {
-        const row = el('div', 'pctl'), col = el('input'), rng = el('input'), num = el('span', '', String(custom.s[i]));
-        col.type = 'color'; col.value = hex;
-        rng.type = 'range'; rng.min = -3; rng.max = 0.7; rng.step = 0.01; rng.value = Math.log10(custom.s[i]);
-        col.oninput = () => { custom.c[i] = col.value; changed(); };
-        rng.oninput = () => { custom.s[i] = +Math.pow(10, +rng.value).toPrecision(2); num.textContent = String(custom.s[i]); changed(); };
-        row.append(col, rng, num);
-        ctl.appendChild(row);
-      });
-      const share = el('button', '', 'Share these paints');
-      share.onclick = async () => {
-        const url = location.origin + location.pathname + '#paints=' + paintsCode();
-        if (navigator.share && matchMedia('(pointer:coarse)').matches) { navigator.share({ url }).catch(() => {}); return; }
-        try { await navigator.clipboard.writeText(url); share.textContent = 'Link copied'; }
-        catch { share.textContent = url; }
-      };
-      const reset = el('button', '', 'Reset');
-      reset.onclick = () => { custom = parsePaints(DEFAULT_PAINTS); changed(); render(); };
-      ctl.append(share, reset);
-    } else {
-      const copy = el('button', '', 'Copy to Custom to change');
-      copy.onclick = () => {                         // same tubes, each with its average strength
-        const p = PALETTES[palIdx], hex = v => v.toString(16).padStart(2, '0');
-        custom = { c: [0, 1, 2].map(i => '#' + p.mass[i].map(hex).join('')).concat('#ffffff'),
-                   s: [0, 1, 2].map(i => +Math.cbrt(p.S[i][0] * p.S[i][1] * p.S[i][2]).toPrecision(2)).concat(1) };
-        applyCustom(); usePalette(CUSTOM); render();
-      };
-      ctl.appendChild(copy);
-    }
-    paint();
-  };
-  render();
-}
-
-function showPalettePicker() {
   closeMenu();
-  overlay = el('div', 'overlay dim');
-  const stack = el('div', 'picker');
-  PALETTES.forEach((pal, i) => {
-    const row = el('div', 'prow');
-    const chips = el('div', 'chips');
-    for (const r of PURE) {
-      const c = el('i'); c.style.background = cssOf(r, pal);
-      chips.appendChild(c);
+  document.querySelectorAll('.sheet').forEach(x => x.remove());
+  const sheet = el('div', 'sheet'), head = el('div', 'phead'), nameBtn = el('button'), x = el('button', '', 'X');
+  const body = el('div', 'scroll'), col = el('div', 'pbody'), tubes = el('div', 'tubes'), acts = el('div', 'pacts');
+  x.onclick = () => sheet.remove();
+  head.append(nameBtn, x);
+  const NS = 'http://www.w3.org/2000/svg', tris = document.createElementNS(NS, 'svg');
+  tris.setAttribute('class', 'tris'); tris.setAttribute('viewBox', '0 0 300 ' + (300 * Math.sqrt(3)).toFixed(3));
+  col.append(tris, tubes, acts);
+  body.appendChild(col);
+  sheet.append(head, body);
+  document.body.appendChild(sheet);
+
+  // A diamond of two charts sharing one edge, nine triangles each (rows of 1, 3
+  // and 5). Top: red at the tip, yellow left, blue right. Bottom: the same mixes
+  // with the fourth paint, mirrored, so its yellow and blue meet the top ones.
+  const side = 300, a = side / 3, rh = a * Math.sqrt(3) / 2, base = 3 * rh, cx = side / 2, polys = [];
+  for (const white of [0, 0.5]) {
+    const flip = y => white ? 2 * base - y : y;
+    for (let r = 0; r < 3; r++) {
+      const y0 = flip(r * rh), y1 = flip((r + 1) * rh);
+      const add = (pts, w) => {
+        const p = document.createElementNS(NS, 'polygon');
+        p.setAttribute('points', pts.map(q => q[0].toFixed(2) + ',' + q[1].toFixed(2)).join(' '));
+        p.setAttribute('stroke-width', '0.8');
+        const t = w[0] + w[1] + w[2], k = (1 - white) / t;
+        polys.push([p, [w[0] * k, w[1] * k, w[2] * k, white]]);
+        tris.appendChild(p);
+      };
+      for (let k = 0; k <= r; k++) {
+        const xx = cx + (k - r / 2) * a;
+        add([[xx, y0], [xx - a / 2, y1], [xx + a / 2, y1]], [2 - r, r - k, k]);
+      }
+      for (let k = 0; k < r; k++) {
+        const xl = cx + (k - r / 2) * a;
+        add([[xl, y0], [xl + a, y0], [xl + a / 2, y1]], r === 1 ? [2, 1, 1] : k === 0 ? [1, 2, 1] : [1, 1, 2]);
+      }
     }
-    row.append(chips, el('span', '', pal.name));
-    row.onclick = () => { usePalette(i); closeMenu(); };
-    stack.appendChild(row);
+  }
+  const drawCharts = () => {
+    for (const [p, w] of polys) { const c = cssOf(w); p.setAttribute('fill', c); p.setAttribute('stroke', c); }
+  };
+
+  // The four tubes.
+  const tubeEls = paints.c.map((_, i) => {
+    const t = el('div', 'tube'), inp = el('input'), lvl = el('i'), num = el('b');
+    inp.type = 'color';
+    inp.setAttribute('aria-label', 'Paint ' + (i + 1));
+    t.append(inp, lvl, num);
+    tubes.appendChild(t);
+    inp.addEventListener('input', () => { paints.c[i] = inp.value.toLowerCase(); changed(); });
+    let timer = 0, held = false, id = -1, y = 0, y0 = 0, t0 = 0;
+    const showLevel = () => {
+      lvl.style.height = (strengthPos(paints.s[i]) * 100).toFixed(1) + '%';
+      num.textContent = String(paints.s[i]);
+    };
+    t.addEventListener('pointerdown', e => {
+      held = false; id = e.pointerId; y = y0 = e.clientY;
+      const sx = e.clientX;
+      clearTimeout(timer);
+      timer = setTimeout(() => {                     // held: the tube becomes a strength slider
+        held = true; y0 = y; t0 = strengthPos(paints.s[i]);
+        try { t.setPointerCapture(id); } catch {}
+        t.classList.add('hold');
+        showLevel();
+      }, SWATCH_HOLD_MS);
+      t.dataset.sx = sx;
+    });
+    t.addEventListener('pointermove', e => {
+      if (e.pointerId !== id) return;
+      y = e.clientY;
+      if (!held) {
+        if (Math.hypot(e.clientX - +t.dataset.sx, y - y0) > 10) clearTimeout(timer);
+        return;
+      }
+      e.preventDefault();
+      // Half speed: dragging the height of the tube moves the strength half of
+      // its range, so sliding the finger sideways off the tube keeps it visible.
+      const pos = Math.min(Math.max(t0 + (y0 - y) / (2 * t.clientHeight), 0), 1);
+      const v = strengthAt(pos);
+      if (v !== paints.s[i]) { paints.s[i] = v; showLevel(); changed(); }
+    });
+    const end = e => {
+      if (e.pointerId !== id) return;
+      clearTimeout(timer); id = -1;
+      if (held) { t.classList.remove('hold'); render(); }
+    };
+    t.addEventListener('pointerup', end);
+    t.addEventListener('pointercancel', end);
+    inp.addEventListener('click', e => { if (held) { e.preventDefault(); held = false; } });
+    return { t, inp, lvl };
   });
-  const cancel = el('button', '', 'Cancel');
-  cancel.onclick = closeMenu;
-  stack.appendChild(cancel);
-  overlay.appendChild(stack);
-  app.appendChild(overlay);
+
+  let drop = null;
+  const closeDrop = () => { if (drop) { drop.remove(); drop = null; } };
+  const choose = name => {
+    closeDrop();
+    setPaints(parsePaints(codeNamed(name)), name);
+    touch(); render();
+  };
+  const openDrop = () => {
+    drop = el('div', 'pdrop');
+    for (const name of ['Default', ...savedPalettes.map(x => x.name)]) {
+      const b = el('button', '', name);
+      let timer = 0, longPress = false;
+      if (name !== 'Default') {                      // hold a saved palette to delete it
+        b.addEventListener('pointerdown', () => {
+          longPress = false;
+          timer = setTimeout(() => { longPress = true; confirmDelete(name); }, SWATCH_HOLD_MS);
+        });
+        for (const t of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(t, () => clearTimeout(timer));
+      }
+      b.onclick = () => { if (!longPress) choose(name); };
+      drop.appendChild(b);
+    }
+    head.appendChild(drop);
+  };
+  nameBtn.onclick = () => { if (drop) closeDrop(); else if (savedPalettes.length) openDrop(); };
+  sheet.addEventListener('pointerdown', e => { if (drop && !drop.contains(e.target) && !nameBtn.contains(e.target)) closeDrop(); });
+
+  const dialog = (build) => {
+    const ov = el('div', 'itemmenu'), box = el('div', 'pform');
+    ov.appendChild(box); sheet.appendChild(ov);
+    build(box, () => ov.remove());
+  };
+  const confirmDelete = name => {
+    closeDrop();
+    dialog((box, close) => {
+      const row = el('div', 'pacts'), no = el('button', '', 'Cancel'), yes = el('button', '', 'Delete');
+      box.append(el('div', 'perr', 'Delete "' + name + '"?'), row);
+      row.append(no, yes);
+      no.onclick = close;
+      yes.onclick = () => {
+        savedPalettes = savedPalettes.filter(x => x.name !== name);
+        storePalettes(); close(); render();
+      };
+    });
+  };
+  const askName = () => dialog((box, close) => {
+    const inp = el('input'), err = el('div', 'perr'), row = el('div', 'pacts');
+    const no = el('button', '', 'Cancel'), yes = el('button', '', 'Save');
+    inp.type = 'text'; inp.maxLength = 24; inp.placeholder = 'Name'; inp.autocomplete = 'off';
+    inp.value = palName === 'Default' ? '' : palName;
+    box.append(inp, err, row);
+    row.append(no, yes);
+    const save = () => {
+      const name = inp.value.trim();
+      if (!name || name.toLowerCase() === 'default') { err.textContent = 'Choose another name'; return; }
+      const code = codeOf(paints), hit = savedPalettes.find(x => x.name === name);
+      if (hit) hit.code = code; else savedPalettes.push({ name, code });
+      storePalettes();
+      palName = name; touch();
+      close(); render();
+    };
+    inp.oninput = () => { err.textContent = ''; };
+    inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+    no.onclick = close; yes.onclick = save;
+    inp.focus();
+  });
+  const share = async btn => {
+    let url = location.origin + location.pathname + '#paints=' + codeOf(paints);
+    if (palName !== 'Default' && !isModified()) url += '&name=' + encodeURIComponent(palName);
+    if (navigator.share && matchMedia('(pointer:coarse)').matches) { navigator.share({ url }).catch(() => {}); return; }
+    try { await navigator.clipboard.writeText(url); btn.textContent = 'Link copied'; setTimeout(() => { btn.textContent = 'Share'; }, 1500); }
+    catch { prompt('Copy this link', url); }
+  };
+
+  let lastActs = '';
+  function render() {
+    nameBtn.innerHTML = '';
+    nameBtn.appendChild(el('span', '', palName));
+    if (savedPalettes.length) nameBtn.insertAdjacentHTML('beforeend', ARROW_RIGHT);
+    tubeEls.forEach(({ t, inp, lvl }, i) => {          // paint fills each tube up to its strength
+      lvl.style.background = cssOf(PURE[i]);
+      lvl.style.height = (strengthPos(paints.s[i]) * 100).toFixed(1) + '%';
+      inp.value = paints.c[i];
+    });
+    // Save and Reset once something has changed; Share whenever there is a palette of your own to send.
+    const mod = isModified(), list = [];
+    if (mod) list.push('Save');
+    if (mod || palName !== 'Default') list.push('Share');
+    if (mod) list.push('Reset');
+    const key = list.join();
+    if (key !== lastActs) {
+      lastActs = key;
+      acts.textContent = '';
+      for (const name of list) {
+        const b = el('button', '', name);
+        b.onclick = name === 'Save' ? askName : name === 'Share' ? () => share(b)
+          : () => { const code = codeNamed(palName); setPaints(parsePaints(code || DEFAULT_CODE), code ? palName : 'Default'); touch(); render(); };
+        acts.appendChild(b);
+      }
+    }
+    drawCharts();
+  }
+  let chartQueued = 0;
+  function changed() {
+    setPaints(paints);
+    touch();
+    if (!chartQueued) chartQueued = requestAnimationFrame(() => { chartQueued = 0; render(); });
+  }
+  render();
 }
 
 let toastTimer = 0;
@@ -973,22 +1052,23 @@ function showManual() {
 `Paint
 Draw a lasso and lift to fill that shape with your color. Your color is the square next to the arrow.
 
-Tap a color in the palette to load it, or hold anywhere on the canvas to pick up a color from the painting.
+Tap a color in the palette to load it, or hold anywhere on the painting to pick up a color. The bare linen canvas isn't paint, so it can't be picked up.
 
 Mix
-Tap your color square. It turns into bands fading to grey, and now the lasso blends everything inside it into one color instead of adding paint. Tap the square again, or tap a palette color, to go back to painting.
+Tap your color square. It turns into bands fading to grey, and now the lasso blends all the paint inside it into one color and fills the whole shape with it. Bare canvas inside the lasso doesn't count toward the mix. Tap the square again, or tap a palette color, to go back to painting.
 
 Undo
 Tap the canvas with two fingers to undo, three fingers to redo. Undo is also in the menu. The last three steps are kept.
 
 Menu
-The arrow opens the menu: make a new canvas, save, load, export an image, or undo. Choose "Save Image" in the share sheet to put an export in your camera roll.
-
-Palettes
-Hold down anywhere on the palette to choose a different set of paints.
+The arrow opens the menu: change your paints, make a new canvas, save, load, export an image, or undo. Choose "Save Image" in the share sheet to put an export in your camera roll.
 
 Paints
-Paints in the menu shows a chart of how the current paints mix with each other. Choose Custom there to pick your own four tube colors and set how strong each one is in a mix. The chart and your painting update as you go, and you can share your paints as a link.
+Hold anywhere on the palette, or choose Paints in the menu. The top half of the diamond shows how your paints mix: the three paints in the corners, even mixes between them, and in between mixes leaning toward the nearest corner. The bottom half is the same mixes, mirrored, with an equal amount of the fourth paint.
+
+Each paint under the chart is filled to its strength: how much it takes over in a mix. Tap a paint to change its color. Hold a paint and drag up or down to make it stronger or weaker; slide your finger to the side to see the level while you drag. Your painting and the triangles change as you go.
+
+Once you change something, Save keeps your paints as a named palette, Share sends them as a link, and Reset puts them back. Tap the palette name at the top to switch between your palettes; hold a name there to delete it.
 
 Navigation
 Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.
@@ -1066,14 +1146,13 @@ function decode(data, out) {
   }
   return true;
 }
-const validPal = p => Number.isInteger(p) && p >= 0 && p < PALETTES.length;
 
 let dbPromise = null;
 const openDB = () => dbPromise || (dbPromise = new Promise((res, rej) => {
   const r = indexedDB.open('lasso', 2);              // v2: canvas became 576x720, older saves are dropped
   r.onupgradeneeded = () => {
     for (const name of [...r.result.objectStoreNames]) r.result.deleteObjectStore(name);
-    r.result.createObjectStore('meta', { keyPath: 'id' });   // id, palette, thumbnail
+    r.result.createObjectStore('meta', { keyPath: 'id' });   // id, paints, palette name, thumbnail
     r.result.createObjectStore('data');                      // encoded recipes
   };
   r.onsuccess = () => res(r.result);
@@ -1097,7 +1176,7 @@ function saveWork() {
   const thumb = th.toDataURL('image/png');
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   return idb(['meta', 'data'], 'readwrite', t => {
-    t.objectStore('meta').put({ id, palette: palIdx, thumb });
+    t.objectStore('meta').put({ id, paints: codeOf(paints), palName, thumb });
     t.objectStore('data').put(data, id);
   }).then(() => toast('Saved'), () => toast("Couldn't save"));
 }
@@ -1126,8 +1205,9 @@ async function showGallery() {
         Load: async () => {
           const data = await readWork(save.id).catch(() => null);
           if (!decode(data, rec)) { toast("Couldn't load"); return; }
-          if (validPal(save.palette)) palIdx = save.palette;
-          refreshSwatches(); refreshDisplay();
+          const p = parsePaints(save.paints);
+          if (p) setPaints(p, nameFor(save.paints, save.palName));
+          refreshDisplay();
           setWorking([1, 0, 0, 0]);
           clearHistory();
           touch(); sheet.remove();
@@ -1139,7 +1219,7 @@ async function showGallery() {
           const c = document.createElement('canvas');
           c.width = W; c.height = H;
           const g = c.getContext('2d'), d = g.createImageData(W, H);
-          paintAll(tmp, new Uint32Array(d.data.buffer), PALETTES[validPal(save.palette) ? save.palette : 0]);
+          paintAll(tmp, new Uint32Array(d.data.buffer), makePalette(parsePaints(save.paints) || paints));
           g.putImageData(d, 0, 0);
           exportImage(c);
         },
@@ -1172,7 +1252,7 @@ function autosave() {
   if (!dirty) return;
   dirty = false;
   const data = encode();
-  data.palette = palIdx;
+  data.paints = codeOf(paints); data.palName = palName;
   idb('data', 'readwrite', t => { t.objectStore('data').put(data, '_current'); }).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
@@ -1184,32 +1264,43 @@ setWorking([1, 0, 0, 0]);
 setTool('paint');
 resetCanvas();
 layout();
+// A shared link: #paints=<code>, optionally &name=<palette name>.
+function readLink(hash) {
+  if (!hash.startsWith('#paints=')) return null;
+  const [code, rest] = hash.slice(8).split('&name=');
+  const p = parsePaints(code);
+  if (!p) return null;
+  let name = '';
+  try { name = decodeURIComponent(rest || '').trim().slice(0, 24); } catch {}
+  return { p, name };
+}
+function openLink(l) {
+  history.replaceState(null, '', location.pathname + location.search);
+  setPaints(l.p, nameFor(codeOf(l.p), l.name || 'Shared'));
+  touch();
+  showPaints();
+}
 readWork('_current').then(data => {
   if (dirty || !decode(data, rec)) return;
-  if (validPal(data.palette)) palIdx = data.palette;
-  refreshSwatches(); refreshDisplay();
+  let p = parsePaints(data.paints);
+  if (!p && data.palette === 2) { try { p = parsePaints(localStorage.getItem('lasso-paints')); } catch {} }   // the old Custom palette
+  if (p) setPaints(p, typeof data.palName === 'string' ? data.palName : nameFor(codeOf(p), 'Custom'));
+  refreshDisplay();
   setWorking([1, 0, 0, 0]);
 }).catch(() => {}).then(() => {
-  if (!linkedPaints) return;                         // opened from a shared paints link
-  history.replaceState(null, '', location.pathname);
-  usePalette(CUSTOM);
-  toast('Shared paints loaded');
+  const l = readLink(location.hash);
+  if (l) openLink(l);                                // opened from a shared paints link
 });
-
-addEventListener('hashchange', () => {             // a paints link opened while the app is already running
-  const p = parsePaints(location.hash.startsWith('#paints=') ? location.hash.slice(8) : '');
-  if (!p) return;
-  custom = p; applyCustom();
-  history.replaceState(null, '', location.pathname);
-  usePalette(CUSTOM);
-  toast('Shared paints loaded');
+addEventListener('hashchange', () => {               // a paints link opened while the app is already running
+  const l = readLink(location.hash);
+  if (l) openLink(l);
 });
 
 const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 if ('serviceWorker' in navigator && !local) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Small hook for automated checks.
-window.__lasso = { CUSTOM, paintsCode, W, H, rec, pix, encode, decode, rgbOf, PALETTES, groundOf, undo, redo, state: () => ({ tool, working, zoom, panX, panY, palIdx, homeY, undo: undoStack.length, redo: redoStack.length }) };
+window.__lasso = { W, H, rec, pix, encode, decode, rgbOf, undo, redo, pal: () => pal, code: () => codeOf(paints), state: () => ({ tool, working, zoom, panX, panY, palName, saved: savedPalettes.length, homeY, undo: undoStack.length, redo: redoStack.length }) };
 })();
 </script>
 </body>
