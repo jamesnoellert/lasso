@@ -734,7 +734,7 @@ swatches.forEach((s, i) => {
 });
 const toggleTool = () => setTool(tool === 'paint' ? 'mix' : 'paint');
 well.onclick = toggleTool;
-$('bX').onclick = () => showMenu(['New', 'Save', 'Load', 'Export', 'Manual'],
+$('bX').onclick = () => showMenu(['New', 'Save', 'Load', 'Export', 'Info'],
   [confirmNew, saveWork, showGallery, () => exportImage(art), showManual]);
 
 // ───────────────────────── Keyboard ─────────────────────────
@@ -1083,13 +1083,13 @@ function showManual() {
     para(d, 'Once you start making changes, options will appear to save a palette, reset to default, or share it. Sharing creates a link that will open a version of the app with your current palette. This feature will eventually be an easy way to trade palettes with friends.');
   });
   section('Make this an app on your phone', d => {
-    para(d, 'For iPhones, if you open this in Safari, press "Share", and then choose "Add to Home Screen", it will create an app icon that opens a full screen version. Paintings saved will be stored on your device so you don\'t lose progress when a browser closes.');
+    para(d, 'On an iPhone or iPad, if you open this in Safari, press "Share", and then choose "Add to Home Screen", it will create an app icon that opens a full screen version. Paintings saved will be stored on your device so you don\'t lose progress when a browser closes.');
   });
   section('Gestures and Hot Keys', d => {
     para(d, 'Hold anywhere on the painting to pick up a color. The bare linen canvas isn\'t paint, so it can\'t be picked up, and it doesn\'t count toward a mix.');
     para(d, 'Pinch to zoom in and out. Two-finger drag to pan. Double-tap to reset the view.');
     para(d, 'Tap the canvas with two fingers to undo, three fingers to redo. The last three steps are kept.');
-    para(d, 'The arrow opens the menu: New, Save, Load, Export and this Manual. Choose "Save Image" in the share sheet to put an export in your camera roll.');
+    para(d, 'The arrow opens the menu: New, Save, Load, Export and this Info. Choose "Save Image" in the share sheet to put an export in your camera roll.');
     para(d, 'With an Apple Pencil: once you draw with the pencil, the pencil paints and a finger moves the canvas instead. Holding a finger still on the canvas still picks up a color.');
     para(d, 'Keyboard and mouse:');
     keys(d, [
