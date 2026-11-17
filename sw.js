@@ -1,5 +1,5 @@
 // Offline support: serve the cached copy instantly, refresh it in the background.
-const CACHE = 'lasso-v8';
+const CACHE = 'lasso-v9';
 const ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

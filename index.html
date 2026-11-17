@@ -88,9 +88,9 @@ button{font:inherit;color:#fff;background:#000;border:0;border-radius:0;display:
 @supports (height:100dvh){.pbody{--avail:calc(100dvh - 56px - 52px - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}}
 .tris{display:block;width:100%}
 .tubes{display:flex}
-.tube{flex:1;aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;background:#000;-webkit-touch-callout:none;-webkit-user-drag:none}
+.tube{display:block;flex:1;aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;background:#000;-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
 .tris{-webkit-touch-callout:none;-webkit-user-drag:none}
-.tube input{position:absolute;left:50%;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;pointer-events:none}
+.tube input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;pointer-events:none}
 .tube i,.tube b{position:absolute;pointer-events:none}
 .tube i{left:0;right:0;bottom:0}
 .tube b{left:0;top:0;padding:4px 6px;font-size:12px;font-weight:400;display:none}
@@ -877,21 +877,24 @@ function showPaints() {
 
   // The four tubes.
   const tubeEls = paints.c.map((_, i) => {
-    const t = el('div', 'tube'), inp = el('input'), lvl = el('i'), num = el('b');
+    // Each tube is a <label> for its colour input, so a tap opens the picker the
+    // browser's own way (Safari won't open one from code during a touch).
+    const t = el('label', 'tube'), inp = el('input'), lvl = el('i'), num = el('b');
     inp.type = 'color';
     inp.setAttribute('aria-label', 'Paint ' + (i + 1));
     t.append(inp, lvl, num);
     tubes.appendChild(t);
     inp.addEventListener('input', () => { paints.c[i] = inp.value.toLowerCase(); changed(); });
-    let timer = 0, held = false, id = -1, y = 0, y0 = 0, t0 = 0;
+    let timer = 0, held = false, heldEnd = 0, id = -1, y = 0, y0 = 0, t0 = 0;
     const showLevel = () => {
       lvl.style.height = (strengthPos(paints.s[i]) * 100).toFixed(1) + '%';
       num.textContent = String(paints.s[i]);
     };
-    // Safari's own long press (lift, copy, callout) is switched off so a hold is ours.
-    t.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-    const openPicker = () => { try { if (inp.showPicker) { inp.showPicker(); return; } } catch {} inp.click(); };
-    t.addEventListener('click', () => { if (!held) openPicker(); });   // mouse
+    // After a hold or a drag, the tap that ends it must not open the picker.
+    t.addEventListener('click', e => {
+      if (e.target === inp) return;
+      if (held || t.dataset.moved || performance.now() - heldEnd < 700) e.preventDefault();
+    });
     t.addEventListener('pointerdown', e => {
       held = false; id = e.pointerId; y = y0 = e.clientY; t.dataset.moved = '';
       const sx = e.clientX;
@@ -921,8 +924,7 @@ function showPaints() {
     const end = e => {
       if (e.pointerId !== id) return;
       clearTimeout(timer); id = -1;
-      if (held) { t.classList.remove('hold'); render(); setTimeout(() => { held = false; }, 0); }
-      else if (e.type === 'pointerup' && e.pointerType !== 'mouse' && !t.dataset.moved) openPicker();   // a tap
+      if (held) { held = false; heldEnd = performance.now(); t.classList.remove('hold'); render(); }
     };
     t.addEventListener('pointerup', end);
     t.addEventListener('pointercancel', end);
